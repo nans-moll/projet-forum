@@ -1,37 +1,73 @@
 package main
 
 import (
-	"/authentification/pages"
-	"fmt"
+	"html/template"
 	"log"
 	"net/http"
-	"threads/templates"
+	"os"
+	"path/filepath"
 )
 
-// Fonction principale qui initialise le serveur et définit les routes.
+// TemplateData représente les données passées aux templates
+type TemplateData struct {
+	Title string
+	Data  interface{}
+}
+
+// loadTemplates charge tous les templates HTML
+func loadTemplates() *template.Template {
+	tmpl := template.New("")
+
+	// Charger tous les fichiers .html du dossier views
+	err := filepath.Walk("views", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Ext(path) == ".html" {
+			_, err = tmpl.ParseFiles(path)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Fatal("Erreur lors du chargement des templates:", err)
+	}
+
+	return tmpl
+}
+
+// renderTemplate est une fonction helper pour rendre les templates
+func renderTemplate(w http.ResponseWriter, tmpl *template.Template, name string, data *TemplateData) {
+	err := tmpl.ExecuteTemplate(w, name, data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func main() {
-	templates.InitTemplates() // Chargement des templates
+	// Charger les templates
+	templates := loadTemplates()
 
-	// Gestion des fichiers statiques (CSS, images, font)
-	fileServer := http.FileServer(http.Dir("./static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fileServer))
+	// Servir les fichiers statiques
+	fs := http.FileServer(http.Dir("static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	// Définition des routes du site
+	// Route principale
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		data := &TemplateData{
+			Title: "Forum",
+			Data:  nil,
+		}
+		renderTemplate(w, templates, "index.html", data)
+	})
 
-	http.HandleFunc("/challenge1", pages.Defi1)
-	http.HandleFunc("/challenge2", pages.Defi2)
-	http.HandleFunc("/challenge3", pages.Challenge3)
-	http.HandleFunc("/challenge4", pages.Challenge4)
-	http.HandleFunc("/challenge5", pages.Challenge5)
-	http.HandleFunc("/challenge6", pages.Challenge6)
-	http.HandleFunc("/portfabio", pages.Portfabio)
-	http.HandleFunc("/dashboard", pages.TableauDeBord)
-	http.HandleFunc("/team", pages.Team)
-
-	http.HandleFunc("/all-defis", pages.Alldefis)
-	http.HandleFunc("/", pages.HomePage)
-
-	// Démarrage du serveur sur le port 8080
-	fmt.Println("Serveur démarré sur http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// Configuration du serveur
+	port := ":8080"
+	log.Printf("Serveur démarré sur http://localhost%s", port)
+	if err := http.ListenAndServe(port, nil); err != nil {
+		log.Fatal("Erreur lors du démarrage du serveur:", err)
+	}
 }
