@@ -1,0 +1,134 @@
+Objectifs pédagogiques
+L’objectif est de réaliser un projet embraquant l’ensemble des notions que vous avez
+découvert durant votre première année de Bachelor informatique, mais également de
+clôturer celle-ci. Pour cela, vous allez devoir réaliser un forum (pas d’inquiétude, c’est
+uniquement le nom du module) qui répond à l’ensemble des spécificités techniques
+indiquées ci-dessous. Le projet est à réaliser en binôme. Vous êtes libre au niveau de
+l’implémentation de celui-ci pour l’interface. Aucun thème n’est imposé.
+Rendue : vous devez le lien du dépôt GitHub contenant le code source de votre solution
+ainsi que les documentations demandés sur moodle, avant le 16/06/25 à 23h59.
+Fonctionnalités obligatoires
+Votre solution devra embraquer certaines fonctionnalités obligatoires pour répondre à la
+demande. Chaque fonctionnalité indiquée ci-dessous est donc obligatoire. Chaque
+fonctionnalité est présentée sous la forme de spécificité technique, soit accompagnée
+d’une description et de ses éventuelles contraintes.
+FT-1 Inscription
+Un utilisateur non authentifié doit pouvoir s’inscrire sur la plateforme pour effectuer
+ceci, il doit compléter un formulaire avec les informations suivantes :
+• Un nom d’utilisateur
+• Une adresse mail
+• Un mot de passe
+Il faut noter que le nom d’utilisateur ainsi que l’adresse mail doivent être uniques au sein
+de la plateforme. Pour ce qui concerne le mot de passe, il doit respecter les contraintes
+suivantes : une taille minimale de 12 caractères, une majuscule et un caractère spécial
+au minimum.
+Le mot de passe n’est pas stocké en clair dans la base de données, un hash avec
+l’algorithme SHA512 est attendue au minimum.
+FT-2 Connexion
+Un utilisateur non authentifié doit pouvoir se connecter sur la plateforme. Pour
+effectuer cela, il doit compléter un formulaire avec les informations suivantes :
+• Identifiant, qui correspond au nom d’utilisateur ou bien à l’adresse mail de
+l’utilisateur
+• Mot de passe
+Une fois les données, vous allez devoir générer un Token JWT dans l’objectif de pouvoir
+garder une persistance de connexion.
+FT-3 Création d’un fil de discussion
+Un utilisateur authentifié aura la possibilité de pouvoir de créer un fil de discussion. Il
+est défini par les informations suivantes :
+• Un titre
+• Une description
+• Un ensemble de tags ou de catégories
+• Une date de création
+• Un auteur
+• Un état (fermé, ouvert ou bien archivé)
+Lorsqu’un fil de discussion est fermé, il reste toujours afficher et accessible, mais les
+utilisateurs ne peuvent plus poster de messages tant dit que celui archivé n’est plus
+affiché ni accessible.
+FT-4 Consulter un fil de discussion
+Un utilisateur non authentifié ou bien authentifié à la possibilité de pouvoir
+consulter un fil de discussion.
+FT-5 Poster un message dans un fil de discussion
+Un utilisateur authentifié aura la possibilité d’envoyer des messages dans un fil de
+discussion, chaque message devra contenir les informations ci-dessous :
+• Un auteur
+• Un message
+• Une date d’envoi
+FT-6 Liker et disliker un message d’un fil de discussion
+Un utilisateur authentifié aura la possibilité de pouvoir liker ou bien disliker un
+message d’un fil de discussion. Il faudra penser à gérer le fait qu’un utilisateur ne puisse
+pas liker et disliker le même message en même temps.
+FT-7 Gestion des messages et d’un fil de discussion
+Un utilisateur authentifié et propriété d’un fil de discussion de celui-ci aura la
+possibilité de pouvoir modifier ou bien supprimer celui-ci.
+Un utilisateur authentifié avec un rôle admin pourra supprimer n’importe quel message
+ou bien fil de discussion, sans obligatoirement être propriétaire de celui-ci.
+Il faut penser en cas de suppression d’un fil de discussion ou bien d’un message de
+supprimer l’intégralité des données enregistrées lié à celui-ci.
+FT-8 Trie des messages d’un fil de discussion
+L’utilisateur pour choisir d’afficher les messages par ordre chronologique, ou bien
+en fonction des like et dislike du message. Un like apporte +1 au score de popularité du
+message et un dislike apporte -1 au score de popularité du message. Les messages sont
+par défaut triés du plus récent au plus ancien.
+FT-9 Système de pagination pour les fils de discussion ou bien les
+messages
+Les messages ainsi que les fils de discussion leurs affichages sous forme de liste
+devrons être en lot de 10, 20, 30 ou bien la totalité de la liste. Par défaut, il faudra les
+afficher par lot de 10 éléments.
+FT-10 Afficher les fils de discussion par tag ou bien catégorie
+Les fils de discussion peuvent être listés en fonction de leurs tags ou bien
+catégories.
+FT-11 Rechercher un fil de discussion
+Un utilisateur authentifié pourra effectuer une recherche pour trouver un fil de
+discussion en utilisant un tag ou bien en effectuant une recherche par le titre. Cela doit
+être géré automatiquement.
+FT-12 Gestion et d’administration de la plateforme
+Il faudra permettre à un utilisateur authentifié possédant le rôle admin, de pouvoir
+accéder à un dashboard lui permettant d’administrer la plateforme. Il pourra effectuer les
+actions suivantes :
+• Modifier l’état d’un fil de discussion
+• Supprimer un fil de discussion
+• Supprimer un message
+• Bannir un compte d’un utilisateur
+Fonctionnalités bonus
+Voici quelques piste de fonctionnalités bonus que vous pouvez rajouter à votre
+plateforme. Uniquement lors que vous avez terminé d’implémenter les fonctionnalités
+obligatoire.
+FTB-1 Gestion des images dans les messages
+Un utilisateur authentifié aura la possibilité de joindre une image dans un
+message.
+FTB-2 Création et gestion du profil
+Un utilisateur inscrit sur la plateforme possède un profil qui configure lors de
+l’inscription et pourra modifier depuis une page de paramètres lorsqu’il est authentifié.
+Un profil devra afficher les informations suivantes :
+• Nom d’utilisateur
+• Photo de profils
+• Biographie
+• Dernière connexion
+• Nombre de messages envoyés
+• Nombre de fils de discussion créé
+FT3- Gestion des amitiés
+Un utilisateur authentifié pourra envoyer une demande d’ami à un autre utilisateur.
+Cette demande devra être acceptée ou bien refuser par l’utilisateur. Une fois les deux
+utilisateurs amis, ils pourront consulter les fils de discussions privées de chacun.
+Note : vous devez rajouter des nouveaux états au fil de discussion : public ou bien privée
+D’autre fonctionnalités peuvent être rajoutées : un système de chat, etc…
+Contraintes techniques
+Vous allez devoir obligatoirement utiliser une architecture MVC.
+Vous allez devoir obligatoirement utiliser Golang pour interagir avec la base de
+données, distribuer les pages, etc… Cependant, le langage Javascript est toléré pour
+effectuer certaines requêtes ou bien de l’animation.
+Vous allez devoir faire persister vos données en utilisant une base de données.
+Documentation
+Un fichier README doit être présent à la racine de votre projet, expliquant
+comment installer et lancer votre projet, mais il devra également contenir la liste des
+routes de votre projet (en séparant les routes distribuant une vue et celles pour le
+traitement de données) ainsi pour finir la composition de votre équipe.
+Une synthèse du déroulement du projet du point de vue de votre équipe. Seulement
+le côté gestion est attendu. Plus précisément, les éléments suivants doivent être abordés
+en détails :
+•Comment avez-vous décomposé le projet ? Quelles ont été les phases ?
+•Qui s’est occupé de quoi ? Avez utiliser une stratégie particulière pour répartir les
+tâche ?
+•Comment avez-vous géré votre temps ? Avez-vous défini des priorités ?
+•Avez-vous défini une stratégie pour vous documenter ?
+Ce rendu peut être fait soit sous forme de rapport au format PDF à mettre sur le dépôt Git. 
