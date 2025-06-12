@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inscription - CinéForum</title>
-    <link rel="stylesheet" href="/static/css/auth.css">
+    <link rel="stylesheet" href="/views/layouts/auth/auth.css">
 </head>
 <body>
     <div class="auth-container">
         <div class="auth-card">
             <div class="auth-header">
-                <div class="auth-logo">🎭</div>
+                <div class="auth-logo"> 🎬 CinéForum</div>
                 <h1 class="auth-title">Inscription</h1>
                 <p class="auth-subtitle">Rejoignez la communauté des cinéphiles</p>
             </div>
@@ -20,17 +20,34 @@
 
             <form class="auth-form" id="registerForm">
                 <div class="form-group has-icon" data-icon="👤">
-                    <label for="username">Nom d'utilisateur</label>
+                    <label for="username">name</label>
                     <input type="text" id="username" name="username" required 
                            placeholder="Choisissez votre nom d'utilisateur">
                     <small>3-20 caractères, lettres, chiffres et _ uniquement</small>
                 </div>
 
+                 <form class="auth-form" id="registerForm">
+                <div class="form-group has-icon" data-icon="👤">
+                    <label for="username">nickname</label>
+                    <input type="text" id="username" name="username" required 
+                           placeholder="Choisissez votre nom d'utilisateur">
+                    <small>3-20 caractères, lettres, chiffres et _ uniquement</small>
+                </div>
+
+
                 <div class="form-group has-icon" data-icon="📧">
-                    <label for="email">Adresse email</label>
+                    <label for="email">email</label>
                     <input type="email" id="email" name="email" required 
                            placeholder="votre@email.com">
                     <small>Utilisée pour la récupération de mot de passe</small>
+                </div>
+
+                <div class="form-group has icon" data-icon="">
+                    <labl for ="pseudo">pseudo</labl>
+                    <input type="pseudo" id="pseudo" name="pseudo" required 
+                           placeholder="Choisissez votre pseudo">
+                    <small>Optionnel, affiché dans les commentaires</small>
+
                 </div>
 
                 <div class="form-group has-icon" data-icon="🔒">
@@ -38,6 +55,8 @@
                     <input type="password" id="password" name="password" required 
                            placeholder="Créez un mot de passe sécurisé">
                     <span class="password-toggle" onclick="togglePassword('password')">👁️</span>
+
+
                     
                     <div class="password-requirements">
                         <div class="requirement" id="req-length">
@@ -94,7 +113,7 @@
             <div class="auth-footer">
                 <p class="auth-link">
                     Déjà membre ? 
-                    <a href="/login">Se connecter</a>
+                    <a href="/th">Se connecter</a>
                 </p>
                 <p class="auth-link" style="margin-top: 1rem;">
                     <a href="/">← Retour à l'accueil</a>

@@ -7,3 +7,4 @@ type User struct {
 	nickname string `'json:"nickname"`
 	Password string `json:"password"`
 }
+type Thread struct {

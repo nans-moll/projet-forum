@@ -283,13 +283,3 @@ nav {
 }
 
 /* Featured discussions avec affiches de films */
-.featured-section h2 {
-    margin-bottom: 2rem;
-    color: var(--secondary-color);
-    border-bottom: 2px solid var(--primary-color);
-    padding-bottom: 0.5rem;
-}
-
-.featured-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300
