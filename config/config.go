@@ -1,7 +1,7 @@
 package config
 
 import (
-	"os"
+	"fmt"
 )
 
 // Configuration globale de l'application
@@ -17,28 +17,21 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		DBHost:     getEnvOrDefault("DB_HOST", "localhost"),
-		DBPort:     getEnvOrDefault("DB_PORT", "5432"),
-		DBUser:     getEnvOrDefault("DB_USER", "postgres"),
-		DBPassword: getEnvOrDefault("DB_PASSWORD", "postgres"),
-		DBName:     getEnvOrDefault("DB_NAME", "forum_db"),
-		ServerPort: getEnvOrDefault("SERVER_PORT", "8080"),
-		JWTSecret:  getEnvOrDefault("JWT_SECRET", "votre_clé_secrète_jwt"),
+		DBHost:     GetEnvOrDefault("DB_HOST", "localhost"),
+		DBPort:     GetEnvOrDefault("DB_PORT", "3306"), // Port MySQL par défaut
+		DBUser:     GetEnvOrDefault("DB_USER", "root"), // Utilisateur MySQL par défaut
+		DBPassword: GetEnvOrDefault("DB_PASSWORD", ""),
+		DBName:     GetEnvOrDefault("DB_NAME", "forum_db"),
+		ServerPort: GetEnvOrDefault("SERVER_PORT", "8080"),
+		JWTSecret:  GetEnvOrDefault("JWT_SECRET", "votre_clé_secrète_jwt"),
 	}
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
 
 func (c *Config) GetDBConnString() string {
-	return "host=" + c.DBHost +
-		" port=" + c.DBPort +
-		" user=" + c.DBUser +
-		" password=" + c.DBPassword +
-		" dbname=" + c.DBName +
-		" sslmode=disable"
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		c.DBUser,
+		c.DBPassword,
+		c.DBHost,
+		c.DBPort,
+		c.DBName)
 }

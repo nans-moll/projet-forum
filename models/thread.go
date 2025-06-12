@@ -2,6 +2,7 @@ package models
 
 import (
 	"projet-forum/config"
+	"strings"
 	"time"
 )
 
@@ -42,26 +43,35 @@ func (Thread) TableName() string {
 func (t *Thread) CreateThread() error {
 	query := `
 		INSERT INTO threads (title, description, tags, status, visibility, author_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
-	return config.DB.QueryRow(
+	result, err := config.DB.Exec(
 		query,
 		t.Title,
 		t.Description,
-		t.Tags,
+		strings.Join(t.Tags, ","), // Convertir le tableau en chaîne
 		t.Status,
 		t.Visibility,
 		t.AuthorID,
 		time.Now(),
 		time.Now(),
-	).Scan(&t.ID)
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	t.ID = int(id)
+	return nil
 }
 
 // GetThreadByID récupère un fil de discussion par son ID
 func GetThreadByID(id int) (*Thread, error) {
 	thread := &Thread{}
-	query := `SELECT * FROM threads WHERE id = $1`
+	query := `SELECT * FROM threads WHERE id = ?`
 	err := config.DB.QueryRow(query, id).Scan(
 		&thread.ID,
 		&thread.Title,
@@ -84,14 +94,14 @@ func GetThreadByID(id int) (*Thread, error) {
 func (t *Thread) UpdateThread() error {
 	query := `
 		UPDATE threads 
-		SET title = $1, description = $2, tags = $3, status = $4, visibility = $5, updated_at = $6
-		WHERE id = $7`
+		SET title = ?, description = ?, tags = ?, status = ?, visibility = ?, updated_at = ?
+		WHERE id = ?`
 
 	_, err := config.DB.Exec(
 		query,
 		t.Title,
 		t.Description,
-		t.Tags,
+		strings.Join(t.Tags, ","),
 		t.Status,
 		t.Visibility,
 		time.Now(),
@@ -102,7 +112,7 @@ func (t *Thread) UpdateThread() error {
 
 // DeleteThread supprime un fil de discussion
 func (t *Thread) DeleteThread() error {
-	query := `DELETE FROM threads WHERE id = $1`
+	query := `DELETE FROM threads WHERE id = ?`
 	_, err := config.DB.Exec(query, t.ID)
 	return err
 }
@@ -111,9 +121,9 @@ func (t *Thread) DeleteThread() error {
 func GetThreadsByTag(tag string, limit, offset int) ([]*Thread, error) {
 	query := `
 		SELECT * FROM threads 
-		WHERE $1 = ANY(tags) AND status != 'archived'
+		WHERE FIND_IN_SET(?, tags) AND status != 'archived'
 		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, tag, limit, offset)
 	if err != nil {
@@ -148,9 +158,9 @@ func GetThreadsByTag(tag string, limit, offset int) ([]*Thread, error) {
 func GetThreadsByTitle(title string, limit, offset int) ([]*Thread, error) {
 	query := `
 		SELECT * FROM threads 
-		WHERE title ILIKE $1 AND status != 'archived'
+		WHERE title LIKE ? AND status != 'archived'
 		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, "%"+title+"%", limit, offset)
 	if err != nil {
@@ -185,9 +195,9 @@ func GetThreadsByTitle(title string, limit, offset int) ([]*Thread, error) {
 func GetThreadsByAuthorID(authorID, limit, offset int) ([]*Thread, error) {
 	query := `
 		SELECT * FROM threads 
-		WHERE author_id = $1 AND status != 'archived'
+		WHERE author_id = ? AND status != 'archived'
 		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, authorID, limit, offset)
 	if err != nil {

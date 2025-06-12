@@ -7,8 +7,7 @@ import (
 	"projet-forum/models"
 	"strconv"
 )
-
-// LikeMessage ajoute un like à un message
+ 
 func LikeMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -27,14 +26,12 @@ func LikeMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Vérifier si l'utilisateur a déjà réagi à ce message
 	reaction, err := models.GetMessageReaction(messageID, user.ID)
 	if err == nil {
 		if reaction.ReactionType == "like" {
 			http.Error(w, "You have already liked this message", http.StatusBadRequest)
 			return
 		} else if reaction.ReactionType == "dislike" {
-			// Supprimer le dislike avant d'ajouter le like
 			if err := models.DeleteMessageReaction(messageID, user.ID); err != nil {
 				http.Error(w, "Error removing previous reaction", http.StatusInternalServerError)
 				return
@@ -42,7 +39,6 @@ func LikeMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Ajouter le like
 	message, err := models.GetMessageByID(messageID)
 	if err != nil {
 		http.Error(w, "Message not found", http.StatusNotFound)
@@ -54,7 +50,6 @@ func LikeMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enregistrer la réaction
 	reaction = &models.MessageReaction{
 		MessageID:    messageID,
 		UserID:       user.ID,
@@ -69,7 +64,6 @@ func LikeMessage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(message)
 }
 
-// DislikeMessage ajoute un dislike à un message
 func DislikeMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -88,14 +82,12 @@ func DislikeMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Vérifier si l'utilisateur a déjà réagi à ce message
 	reaction, err := models.GetMessageReaction(messageID, user.ID)
 	if err == nil {
 		if reaction.ReactionType == "dislike" {
 			http.Error(w, "You have already disliked this message", http.StatusBadRequest)
 			return
 		} else if reaction.ReactionType == "like" {
-			// Supprimer le like avant d'ajouter le dislike
 			if err := models.DeleteMessageReaction(messageID, user.ID); err != nil {
 				http.Error(w, "Error removing previous reaction", http.StatusInternalServerError)
 				return
@@ -103,7 +95,6 @@ func DislikeMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Ajouter le dislike
 	message, err := models.GetMessageByID(messageID)
 	if err != nil {
 		http.Error(w, "Message not found", http.StatusNotFound)
@@ -115,7 +106,6 @@ func DislikeMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enregistrer la réaction
 	reaction = &models.MessageReaction{
 		MessageID:    messageID,
 		UserID:       user.ID,

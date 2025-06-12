@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"projet-forum/config"
 
-	_ "github.com/lib/pq"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var DB *sql.DB
@@ -16,7 +16,7 @@ func InitDB() error {
 	dbConnString := cfg.GetDBConnString()
 
 	var err error
-	DB, err = sql.Open("postgres", dbConnString)
+	DB, err = sql.Open("mysql", dbConnString)
 	if err != nil {
 		return fmt.Errorf("erreur lors de la connexion à la base de données: %v", err)
 	}

@@ -20,21 +20,30 @@ func (MessageReaction) TableName() string {
 func (r *MessageReaction) CreateReaction() error {
 	query := `
 		INSERT INTO message_reactions (message_id, user_id, reaction_type, created_at)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id`
+		VALUES (?, ?, ?, ?)`
 
-	return config.DB.QueryRow(
+	result, err := config.DB.Exec(
 		query,
 		r.MessageID,
 		r.UserID,
 		r.ReactionType,
 		time.Now(),
-	).Scan(&r.ID)
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	r.ID = int(id)
+	return nil
 }
 
 func GetMessageReaction(messageID, userID int) (*MessageReaction, error) {
 	reaction := &MessageReaction{}
-	query := `SELECT * FROM message_reactions WHERE message_id = $1 AND user_id = $2`
+	query := `SELECT * FROM message_reactions WHERE message_id = ? AND user_id = ?`
 	err := config.DB.QueryRow(query, messageID, userID).Scan(
 		&reaction.ID,
 		&reaction.MessageID,
@@ -49,7 +58,7 @@ func GetMessageReaction(messageID, userID int) (*MessageReaction, error) {
 }
 
 func DeleteMessageReaction(messageID, userID int) error {
-	query := `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2`
+	query := `DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?`
 	_, err := config.DB.Exec(query, messageID, userID)
 	return err
 }

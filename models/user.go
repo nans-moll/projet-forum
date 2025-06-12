@@ -29,10 +29,9 @@ func (User) TableName() string {
 func (u *User) CreateUser() error {
 	query := `
 		INSERT INTO users (username, email, password_hash, role, created_at, last_connection)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id`
+		VALUES (?, ?, ?, ?, ?, ?)`
 
-	return config.DB.QueryRow(
+	result, err := config.DB.Exec(
 		query,
 		u.Username,
 		u.Email,
@@ -40,13 +39,23 @@ func (u *User) CreateUser() error {
 		"user", // Rôle par défaut
 		time.Now(),
 		time.Now(),
-	).Scan(&u.ID)
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	u.ID = int(id)
+	return nil
 }
 
 // GetUserByID récupère un utilisateur par son ID
 func GetUserByID(id int) (*User, error) {
 	user := &User{}
-	query := `SELECT * FROM users WHERE id = $1`
+	query := `SELECT * FROM users WHERE id = ?`
 	err := config.DB.QueryRow(query, id).Scan(
 		&user.ID,
 		&user.Username,
@@ -70,7 +79,7 @@ func GetUserByID(id int) (*User, error) {
 // GetUserByEmail récupère un utilisateur par son email
 func GetUserByEmail(email string) (*User, error) {
 	user := &User{}
-	query := `SELECT * FROM users WHERE email = $1`
+	query := `SELECT * FROM users WHERE email = ?`
 	err := config.DB.QueryRow(query, email).Scan(
 		&user.ID,
 		&user.Username,
@@ -94,7 +103,7 @@ func GetUserByEmail(email string) (*User, error) {
 // GetUserByUsername récupère un utilisateur par son nom d'utilisateur
 func GetUserByUsername(username string) (*User, error) {
 	user := &User{}
-	query := `SELECT * FROM users WHERE username = $1`
+	query := `SELECT * FROM users WHERE username = ?`
 	err := config.DB.QueryRow(query, username).Scan(
 		&user.ID,
 		&user.Username,
@@ -117,7 +126,7 @@ func GetUserByUsername(username string) (*User, error) {
 
 // UpdateLastConnection met à jour la dernière connexion de l'utilisateur
 func (u *User) UpdateLastConnection() error {
-	query := `UPDATE users SET last_connection = $1 WHERE id = $2`
+	query := `UPDATE users SET last_connection = ? WHERE id = ?`
 	_, err := config.DB.Exec(query, time.Now(), u.ID)
 	return err
 }
@@ -126,9 +135,9 @@ func (u *User) UpdateLastConnection() error {
 func (u *User) UpdateUser() error {
 	query := `
 		UPDATE users 
-		SET username = $1, email = $2, password_hash = $3, role = $4, is_banned = $5,
-			profile_picture = $6, biography = $7, message_count = $8, thread_count = $9
-		WHERE id = $10`
+		SET username = ?, email = ?, password_hash = ?, role = ?, is_banned = ?,
+			profile_picture = ?, biography = ?, message_count = ?, thread_count = ?
+		WHERE id = ?`
 
 	_, err := config.DB.Exec(
 		query,

@@ -26,10 +26,9 @@ func (Message) TableName() string {
 func (m *Message) CreateMessage() error {
 	query := `
 		INSERT INTO messages (thread_id, author_id, content, image_url, created_at, updated_at, likes, dislikes)
-		VALUES ($1, $2, $3, $4, $5, $6, 0, 0)
-		RETURNING id`
+		VALUES (?, ?, ?, ?, ?, ?, 0, 0)`
 
-	return config.DB.QueryRow(
+	result, err := config.DB.Exec(
 		query,
 		m.ThreadID,
 		m.AuthorID,
@@ -37,13 +36,23 @@ func (m *Message) CreateMessage() error {
 		m.ImageURL,
 		time.Now(),
 		time.Now(),
-	).Scan(&m.ID)
+	)
+	if err != nil {
+		return err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	m.ID = int(id)
+	return nil
 }
 
 // GetMessageByID récupère un message par son ID
 func GetMessageByID(id int) (*Message, error) {
 	message := &Message{}
-	query := `SELECT * FROM messages WHERE id = $1`
+	query := `SELECT * FROM messages WHERE id = ?`
 	err := config.DB.QueryRow(query, id).Scan(
 		&message.ID,
 		&message.ThreadID,
@@ -75,9 +84,9 @@ func GetMessagesByThreadID(threadID int, limit, offset int, sortBy string) ([]*M
 
 	query := `
 		SELECT * FROM messages 
-		WHERE thread_id = $1
+		WHERE thread_id = ?
 		ORDER BY ` + orderBy + `
-		LIMIT $2 OFFSET $3`
+		LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, threadID, limit, offset)
 	if err != nil {
@@ -111,8 +120,8 @@ func GetMessagesByThreadID(threadID int, limit, offset int, sortBy string) ([]*M
 func (m *Message) UpdateMessage() error {
 	query := `
 		UPDATE messages 
-		SET content = $1, image_url = $2, updated_at = $3
-		WHERE id = $4`
+		SET content = ?, image_url = ?, updated_at = ?
+		WHERE id = ?`
 
 	_, err := config.DB.Exec(
 		query,
@@ -126,14 +135,14 @@ func (m *Message) UpdateMessage() error {
 
 // DeleteMessage supprime un message
 func (m *Message) DeleteMessage() error {
-	query := `DELETE FROM messages WHERE id = $1`
+	query := `DELETE FROM messages WHERE id = ?`
 	_, err := config.DB.Exec(query, m.ID)
 	return err
 }
 
 // LikeMessage ajoute un like à un message
 func (m *Message) LikeMessage() error {
-	query := `UPDATE messages SET likes = likes + 1 WHERE id = $1`
+	query := `UPDATE messages SET likes = likes + 1 WHERE id = ?`
 	_, err := config.DB.Exec(query, m.ID)
 	if err != nil {
 		return err
@@ -144,7 +153,7 @@ func (m *Message) LikeMessage() error {
 
 // DislikeMessage ajoute un dislike à un message
 func (m *Message) DislikeMessage() error {
-	query := `UPDATE messages SET dislikes = dislikes + 1 WHERE id = $1`
+	query := `UPDATE messages SET dislikes = dislikes + 1 WHERE id = ?`
 	_, err := config.DB.Exec(query, m.ID)
 	if err != nil {
 		return err
@@ -157,9 +166,9 @@ func (m *Message) DislikeMessage() error {
 func GetMessagesByAuthorID(authorID, limit, offset int) ([]*Message, error) {
 	query := `
 		SELECT * FROM messages 
-		WHERE author_id = $1
+		WHERE author_id = ?
 		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, authorID, limit, offset)
 	if err != nil {

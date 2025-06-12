@@ -13,7 +13,6 @@ type CreateMessageRequest struct {
 	ImageURL string `json:"image_url,omitempty"`
 }
 
-// CreateMessage crée un nouveau message dans un fil de discussion
 func CreateMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -32,7 +31,6 @@ func CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Vérifier si le fil existe et est ouvert
 	thread, err := models.GetThreadByID(threadID)
 	if err != nil {
 		http.Error(w, "Thread not found", http.StatusNotFound)
@@ -50,13 +48,11 @@ func CreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validation du contenu
 	if len(req.Content) < 1 {
 		http.Error(w, "Message content cannot be empty", http.StatusBadRequest)
 		return
 	}
 
-	// Créer le message
 	message := &models.Message{
 		ThreadID: threadID,
 		AuthorID: user.ID,
@@ -73,7 +69,6 @@ func CreateMessage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(message)
 }
 
-// GetMessages récupère les messages d'un fil de discussion
 func GetMessages(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -86,14 +81,12 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Vérifier si le fil existe
 	thread, err := models.GetThreadByID(threadID)
 	if err != nil {
 		http.Error(w, "Thread not found", http.StatusNotFound)
 		return
 	}
 
-	// Vérifier la visibilité du fil
 	if thread.Visibility == models.ThreadPrivate {
 		user, ok := middleware.GetUserFromContext(r.Context())
 		if !ok {
@@ -214,70 +207,4 @@ func DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func LikeMessage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	_, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	messageID, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		http.Error(w, "Invalid message ID", http.StatusBadRequest)
-		return
-	}
-
-	message, err := models.GetMessageByID(messageID)
-	if err != nil {
-		http.Error(w, "Message not found", http.StatusNotFound)
-		return
-	}
-
-	if err := message.LikeMessage(); err != nil {
-		http.Error(w, "Error liking message", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(message)
-}
-
-func DislikeMessage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	_, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	messageID, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		http.Error(w, "Invalid message ID", http.StatusBadRequest)
-		return
-	}
-
-	message, err := models.GetMessageByID(messageID)
-	if err != nil {
-		http.Error(w, "Message not found", http.StatusNotFound)
-		return
-	}
-
-	if err := message.DislikeMessage(); err != nil {
-		http.Error(w, "Error disliking message", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(message)
 }
