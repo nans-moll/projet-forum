@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CinéForum - Discussions sur le cinéma</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                🎬 CinéForum
+            </div>
+            <ul class="nav-links">
+                <li><a href="/" class="active">Accueil</a></li>
+                <li><a href="/threads">Discussions</a></li>
+                <li><a href="/search">Recherche</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <a href="/login" class="btn btn-secondary">Connexion</a>
+                <a href="/register" class="btn btn-primary">Inscription</a>
+            </div>
+            <div class="user-menu" id="userMenu" style="display: none;">
+                <span id="username"></span>
+                <a href="/profile" class="btn btn-secondary">Profil</a>
+                <a href="#" class="btn btn-primary" onclick="showCreateThread()">Nouvelle discussion</a>
+                <a href="#" onclick="logout()">Déconnexion</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>🎭 Bienvenue sur CinéForum</h1>
+            <p>Partagez votre passion pour le cinéma, découvrez de nouveaux films et débattez avec d'autres cinéphiles</p>
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="number" id="usersCount">0</span>
+                    <span class="label">Cinéphiles</span>
+                </div>
+                <div class="stat">
+                    <span class="number" id="threadsCount">0</span>
+                    <span class="label">Discussions</span>
+                </div>
+                <div class="stat">
+                    <span class="number" id="messagesCount">0</span>
+                    <span class="label">Messages</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-bar">
+                <input type="text" class="search-input" placeholder="Rechercher des discussions sur vos films préférés..." id="searchInput">
+                <button class="btn btn-primary" onclick="searchThreads()">🔍 Rechercher</button>
+            </div>
+            <div class="search-filters">
+                <select class="filter-select" id="categoryFilter">
+                    <option value="">Tous les genres</option>
+                    <option value="action">Action</option>
+                    <option value="comedy">Comédie</option>
+                    <option value="drama">Drame</option>
+                    <option value="horror">Horreur</option>
+                    <option value="scifi">Science-Fiction</option>
+                </select>
+                <select class="filter-select" id="sortFilter">
+                    <option value="recent">Plus récent</option>
+                    <option value="popular">Plus populaire</option>
+                    <option value="rating">Mieux notés</option>
+                </select>
+            </div>
+        </section>
+
+        <!-- Recent Discussions -->
+        <section class="threads-section">
+            <div class="threads-header">
+                <h2>🎥 Discussions récentes</h2>
+                <button class="btn btn-primary" onclick="showCreateThread()" id="createThreadBtn" style="display: none;">
+                    ➕ Nouvelle discussion
+                </button>
+            </div>
+            <div id="threadsContainer">
+                <!-- Les discussions seront chargées ici dynamiquement -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal de création de discussion -->
+    <div id="createThreadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🎬 Créer une nouvelle discussion</h2>
+                <span class="close" onclick="closeModal('createThreadModal')">&times;</span>
+            </div>
+            <form id="createThreadForm">
+                <div class="form-group">
+                    <label for="threadTitle">Titre de la discussion :</label>
+                    <input type="text" id="threadTitle" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="threadContent">Contenu :</label>
+                    <textarea id="threadContent" name="content" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="threadCategory">Catégorie :</label>
+                    <select id="threadCategory" name="category">
+                        <option value="discussion">Discussion générale</option>
+                        <option value="review">Critique de film</option>
+                        <option value="recommendation">Recommandation</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Créer la discussion</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        // Vérification de l'état de l'authentification au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+            loadThreads();
+            loadStats();
+        });
+
+        // Fonction pour vérifier l'état de l'authentification
+        function checkAuthStatus() {
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                document.getElementById('authButtons').style.display = 'none';
+                document.getElementById('userMenu').style.display = 'flex';
+                document.getElementById('createThreadBtn').style.display = 'block';
+                // Charger le nom d'utilisateur depuis le token
+                const username = JSON.parse(atob(token.split('.')[1])).username;
+                document.getElementById('username').textContent = username;
+            } else {
+                document.getElementById('authButtons').style.display = 'flex';
+                document.getElementById('userMenu').style.display = 'none';
+                document.getElementById('createThreadBtn').style.display = 'none';
+            }
+        }
+
+        // Fonction pour charger les statistiques
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                document.getElementById('usersCount').textContent = stats.users || 0;
+                document.getElementById('threadsCount').textContent = stats.threads || 0;
+                document.getElementById('messagesCount').textContent = stats.messages || 0;
+            } catch (error) {
+                console.error('Erreur lors du chargement des statistiques:', error);
+            }
+        }
+
+        // Fonction pour charger les discussions
+        async function loadThreads() {
+            try {
+                const response = await api.threads.getAll();
+                const container = document.getElementById('threadsContainer');
+                container.innerHTML = '';
+
+                response.threads.forEach(thread => {
+                    const threadElement = createThreadElement(thread);
+                    container.appendChild(threadElement);
+                });
+            } catch (error) {
+                console.error('Erreur lors du chargement des discussions:', error);
+            }
+        }
+
+        // Fonction pour créer un élément de discussion
+        function createThreadElement(thread) {
+            const div = document.createElement('div');
+            div.className = 'thread-card';
+            div.innerHTML = `
+                <h3>${thread.title}</h3>
+                <p>${thread.content}</p>
+                <div class="thread-meta">
+                    <span>Par ${thread.author}</span>
+                    <span>${new Date(thread.created_at).toLocaleDateString()}</span>
+                </div>
+                <div class="thread-actions">
+                    <button onclick="likeThread(${thread.id})">❤️ ${thread.likes || 0}</button>
+                    <button onclick="window.location.href='/thread/${thread.id}'">💬 Voir la discussion</button>
+                </div>
+            `;
+            return div;
+        }
+
+        // Fonction pour la recherche
+        function searchThreads() {
+            const query = document.getElementById('searchInput').value;
+            const category = document.getElementById('categoryFilter').value;
+            const sort = document.getElementById('sortFilter').value;
+            
+            window.location.href = `/search?q=${encodeURIComponent(query)}&category=${category}&sort=${sort}`;
+        }
+
+        // Fonction pour la déconnexion
+        function logout() {
+            localStorage.removeItem('jwt_token');
+            window.location.reload();
+        }
+
+        // Fonction pour afficher le modal de création
+        function showCreateThread() {
+            document.getElementById('createThreadModal').style.display = 'block';
+        }
+
+        // Fonction pour fermer le modal
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Gestion du formulaire de création de discussion
+        document.getElementById('createThreadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const threadData = {
+                title: formData.get('title'),
+                content: formData.get('content'),
+                category: formData.get('category')
+            };
+
+            try {
+                const response = await api.threads.create(threadData);
+                if (response.status === 'success') {
+                    closeModal('createThreadModal');
+                    loadThreads();
+                } else {
+                    alert('Erreur lors de la création de la discussion');
+                }
+            } catch (error) {
+                console.error('Erreur lors de la création de la discussion:', error);
+                alert('Erreur lors de la création de la discussion');
+            }
+        });
+
+        // Fonction pour liker une discussion
+        async function likeThread(threadId) {
+            try {
+                await api.likes.toggle(threadId);
+                loadThreads(); // Recharger les discussions pour mettre à jour les likes
+            } catch (error) {
+                console.error('Erreur lors du like:', error);
+            }
+        }
+    </script>
+</body>
+</html> 

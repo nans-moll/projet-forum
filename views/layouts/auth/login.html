@@ -1,21 +1,177 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/static/css/styles.css">
-    <title>Document</title>
+    <title>Connexion - CinéForum</title>
+    <link rel="stylesheet" href="/static/css/auth.css">
 </head>
 <body>
-    <h1>Login Page</h1>
-    <form action="/login" method="POST">
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required>
-        <br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required>
-        <br>
-        <button type="submit">Login</button>
-    </form>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">🎭</div>
+                <h1 class="auth-title">Connexion</h1>
+                <p class="auth-subtitle">Bienvenue sur CinéForum</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+
+            <form class="auth-form" id="loginForm">
+                <div class="form-group has-icon" data-icon="👤">
+                    <label for="identifier">Identifiant</label>
+                    <input type="text" id="identifier" name="identifier" required 
+                           placeholder="Email ou nom d'utilisateur">
+                </div>
+
+                <div class="form-group has-icon" data-icon="🔒">
+                    <label for="password">Mot de passe</label>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="Votre mot de passe">
+                    <span class="password-toggle" onclick="togglePassword('password')">👁️</span>
+                </div>
+
+                <div class="form-group">
+                    <a href="/forgot-password" class="forgot-password">Mot de passe oublié ?</a>
+                </div>
+
+                <button type="submit" class="auth-submit">
+                    🎬 Se connecter
+                </button>
+
+                <div class="loading" id="loading">
+                    Connexion en cours...
+                </div>
+            </form>
+
+            <div class="auth-footer">
+                <p class="auth-link">
+                    Pas encore de compte ? 
+                    <a href="/register">S'inscrire</a>
+                </p>
+                <p class="auth-link" style="margin-top: 1rem;">
+                    <a href="/">← Retour à l'accueil</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function togglePassword(fieldId) {
+            const passwordInput = document.getElementById(fieldId);
+            const toggle = passwordInput.nextElementSibling;
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggle.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggle.textContent = '👁️';
+            }
+        }
+
+        function showMessage(message, type = 'error') {
+            const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            
+            if (type === 'error') {
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            } else {
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+            }
+        }
+
+        function showLoading(show = true) {
+            const loading = document.getElementById('loading');
+            const submitBtn = document.querySelector('.auth-submit');
+            
+            if (show) {
+                loading.style.display = 'block';
+                submitBtn.style.display = 'none';
+            } else {
+                loading.style.display = 'none';
+                submitBtn.style.display = 'block';
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const loginData = {
+                identifier: formData.get('identifier'),
+                password: formData.get('password')
+            };
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(loginData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'success') {
+                    // Stocker le token JWT
+                    localStorage.setItem('jwt_token', data.data.token);
+                    
+                    showMessage('Connexion réussie ! Redirection...', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1500);
+                    
+                } else {
+                    showMessage(data.message || 'Identifiants incorrects', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Erreur de connexion:', error);
+                showMessage('Erreur de connexion. Veuillez réessayer.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        // Animation d'entrée
+        document.addEventListener('DOMContentLoaded', function() {
+            const card = document.querySelector('.auth-card');
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                card.style.transition = 'all 0.6s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, 100);
+
+            // Vérifier si l'utilisateur est déjà connecté
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                showMessage('Vous êtes déjà connecté. Redirection...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1500);
+            }
+
+            // Vérifier s'il y a un message dans l'URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const message = urlParams.get('message');
+            if (message === 'account_created') {
+                showMessage('Compte créé avec succès ! Vous pouvez maintenant vous connecter.', 'success');
+            }
+        });
+    </script>
 </body>
 </html>

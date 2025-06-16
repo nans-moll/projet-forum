@@ -1,167 +1,228 @@
 package controllers
 
 import (
-	"crypto/sha512"
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"regexp"
+	"strings"
+
 	"projet-forum/middleware"
 	"projet-forum/models"
-	"regexp"
 )
 
-type RegisterRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+type AuthController struct {
+	DB *sql.DB
 }
 
-type LoginRequest struct {
-	Identifier string `json:"identifier"` // Peut être username ou email
-	Password   string `json:"password"`
-}
-
-type AuthResponse struct {
-	Token string       `json:"token"`
-	User  *models.User `json:"user"`
-}
-
-// Register gère l'inscription d'un nouvel utilisateur
-func Register(w http.ResponseWriter, r *http.Request) {
+// Register gère l'inscription des utilisateurs
+func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
+	var input struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
-	// Validation du nom d'utilisateur
-	if len(req.Username) < 3 {
-		http.Error(w, "Username must be at least 3 characters long", http.StatusBadRequest)
-		return
-	}
-
-	// Validation de l'email
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	if !emailRegex.MatchString(req.Email) {
-		http.Error(w, "Invalid email format", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
 	// Validation du mot de passe
-	passwordRegex := regexp.MustCompile(`^(?=.*[A-Z])(?=.*[!@#$%^&*])(?=.*[0-9a-z]).{12,}$`)
-	if !passwordRegex.MatchString(req.Password) {
-		http.Error(w, "Password must be at least 12 characters long and contain at least one uppercase letter and one special character", http.StatusBadRequest)
+	if len(input.Password) < 12 {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Password must be at least 12 characters long",
+		})
 		return
 	}
 
-	// Vérifier si l'utilisateur existe déjà
-	if _, err := models.GetUserByEmail(req.Email); err == nil {
-		http.Error(w, "Email already registered", http.StatusConflict)
+	hasUpper := strings.ContainsAny(input.Password, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(input.Password)
+
+	if !hasUpper || !hasSpecial {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Password must contain at least one uppercase letter and one special character",
+		})
 		return
+	}
+
+	// Créer l'utilisateur
+	user := &models.User{
+		Username: input.Username,
+		Email:    input.Email,
+		Role:     "user",
+		Banned:   false,
 	}
 
 	// Hasher le mot de passe
-	hasher := sha512.New()
-	hasher.Write([]byte(req.Password))
-	passwordHash := string(hasher.Sum(nil))
-
-	// Créer le nouvel utilisateur
-	user := &models.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		PasswordHash: passwordHash,
-	}
-
-	if err := user.CreateUser(); err != nil {
-		http.Error(w, "Error creating user", http.StatusInternalServerError)
+	if err := user.SetPassword(input.Password); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error hashing password: " + err.Error(),
+		})
 		return
 	}
 
-	// Générer le token JWT
-	token, err := middleware.GenerateToken(user)
+	// Enregistrer l'utilisateur
+	query := `
+		INSERT INTO users (
+			username, 
+			email, 
+			password_hash, 
+			role, 
+			is_banned, 
+			thread_count, 
+			message_count, 
+			last_connection,
+			created_at
+		) VALUES (?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`
+	result, err := c.DB.Exec(query,
+		user.Username,
+		user.Email,
+		user.Password,
+		user.Role,
+		user.Banned,
+	)
 	if err != nil {
-		http.Error(w, "Error generating token", http.StatusInternalServerError)
+		if strings.Contains(err.Error(), "Duplicate entry") {
+			if strings.Contains(err.Error(), "username") {
+				middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+					Status:  "error",
+					Message: "Ce nom d'utilisateur est déjà pris",
+				})
+			} else if strings.Contains(err.Error(), "email") {
+				middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+					Status:  "error",
+					Message: "Cette adresse email est déjà utilisée",
+				})
+			} else {
+				middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+					Status:  "error",
+					Message: "Cette information est déjà utilisée",
+				})
+			}
+		} else {
+			middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+				Status:  "error",
+				Message: "Erreur lors de la création du compte: " + err.Error(),
+			})
+		}
 		return
 	}
 
-	// Retourner la réponse
-	response := AuthResponse{
-		Token: token,
-		User:  user,
+	id, err := result.LastInsertId()
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user ID: " + err.Error(),
+		})
+		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	user.ID = id
+
+	middleware.SendJSON(w, http.StatusCreated, middleware.Response{
+		Status: "success",
+		Data:   user,
+	})
 }
 
-// Login gère la connexion d'un utilisateur
-func Login(w http.ResponseWriter, r *http.Request) {
+// Login gère la connexion des utilisateurs
+func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	var input struct {
+		Identifier string `json:"identifier"` // email ou username
+		Password   string `json:"password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
-	// Hasher le mot de passe
-	hasher := sha512.New()
-	hasher.Write([]byte(req.Password))
-	passwordHash := string(hasher.Sum(nil))
-
-	// Chercher l'utilisateur par email ou username
+	// Essayer de trouver l'utilisateur par email ou username
 	var user *models.User
 	var err error
 
-	// Essayer d'abord par email
-	user, err = models.GetUserByEmail(req.Identifier)
-	if err != nil {
-		// Si pas trouvé par email, essayer par username
-		user, err = models.GetUserByUsername(req.Identifier)
-		if err != nil {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-			return
-		}
+	if strings.Contains(input.Identifier, "@") {
+		user, err = models.GetUserByEmail(c.DB, input.Identifier)
+	} else {
+		user, err = models.GetUserByUsername(c.DB, input.Identifier)
 	}
 
-	// Vérifier le mot de passe
-	if user.PasswordHash != passwordHash {
-		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Invalid credentials",
+		})
 		return
 	}
 
 	// Vérifier si l'utilisateur est banni
-	if user.IsBanned {
-		http.Error(w, "Account is banned", http.StatusForbidden)
+	if user.Banned {
+		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
+			Status:  "error",
+			Message: "Account is banned",
+		})
+		return
+	}
+
+	// Vérifier le mot de passe
+	if !user.CheckPassword(input.Password) {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Invalid credentials",
+		})
 		return
 	}
 
 	// Mettre à jour la dernière connexion
-	if err := user.UpdateLastConnection(); err != nil {
-		http.Error(w, "Error updating last connection", http.StatusInternalServerError)
+	if err := user.UpdateLastConnection(c.DB); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error updating last connection",
+		})
 		return
 	}
 
 	// Générer le token JWT
 	token, err := middleware.GenerateToken(user)
 	if err != nil {
-		http.Error(w, "Error generating token", http.StatusInternalServerError)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error generating token",
+		})
 		return
 	}
 
-	// Retourner la réponse
-	response := AuthResponse{
-		Token: token,
-		User:  user,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data: map[string]string{
+			"token": token,
+		},
+	})
 }

@@ -1,227 +1,343 @@
 package controllers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
+
 	"projet-forum/middleware"
 	"projet-forum/models"
-	"strconv"
 )
 
-type CreateThreadRequest struct {
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Tags        []string `json:"tags"`
-	Visibility  string   `json:"visibility"`
+type ThreadController struct {
+	DB *sql.DB
 }
 
-// CreateThread crée un nouveau fil de discussion
-func CreateThread(w http.ResponseWriter, r *http.Request) {
+// CreateThread gère la création d'un nouveau fil de discussion
+func (c *ThreadController) CreateThread(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	user, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	var req CreateThreadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
+	var input struct {
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
 	}
 
-	// Validation des données
-	if len(req.Title) < 3 {
-		http.Error(w, "Title must be at least 3 characters long", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Description) < 10 {
-		http.Error(w, "Description must be at least 10 characters long", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
 	// Créer le fil de discussion
-	thread := &models.Thread{
-		Title:       req.Title,
-		Description: req.Description,
-		Tags:        req.Tags,
-		Status:      models.ThreadOpen,
-		Visibility:  models.ThreadVisibility(req.Visibility),
-		AuthorID:    user.ID,
-	}
-
-	if err := thread.CreateThread(); err != nil {
-		http.Error(w, "Error creating thread", http.StatusInternalServerError)
+	thread, err := models.CreateThread(c.DB, input.Title, input.Description, claims.UserID, input.Tags)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error creating thread: " + err.Error(),
+		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(thread)
+	middleware.SendJSON(w, http.StatusCreated, middleware.Response{
+		Status: "success",
+		Data:   thread,
+	})
 }
 
-// GetThread récupère un fil de discussion par son ID
-func GetThread(w http.ResponseWriter, r *http.Request) {
+// GetThread gère la récupération d'un fil de discussion
+func (c *ThreadController) GetThread(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	threadID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID du fil de discussion
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid thread ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid thread ID",
+		})
 		return
 	}
 
-	thread, err := models.GetThreadByID(threadID)
+	// Récupérer le fil de discussion
+	thread, err := models.GetThread(c.DB, id)
 	if err != nil {
-		http.Error(w, "Thread not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Thread not found",
+		})
 		return
 	}
 
-	// Vérifier la visibilité du fil
-	if thread.Visibility == models.ThreadPrivate {
-		user, ok := middleware.GetUserFromContext(r.Context())
-		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		// TODO: Vérifier si l'utilisateur est ami avec l'auteur du fil
-		if user.ID != thread.AuthorID {
-			http.Error(w, "Access denied", http.StatusForbidden)
-			return
-		}
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(thread)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   thread,
+	})
 }
 
-// GetThreadsByTag récupère les fils de discussion par tag
-func GetThreadsByTag(w http.ResponseWriter, r *http.Request) {
+// ListThreads gère la liste des fils de discussion
+func (c *ThreadController) ListThreads(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
+	// Récupérer les paramètres de pagination
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if perPage < 1 || perPage > 100 {
+		perPage = 10
+	}
+
+	// Récupérer les filtres
+	status := models.ThreadStatus(r.URL.Query().Get("status"))
 	tag := r.URL.Query().Get("tag")
-	if tag == "" {
-		http.Error(w, "Tag parameter is required", http.StatusBadRequest)
-		return
-	}
 
-	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
-	if err != nil || limit <= 0 {
-		limit = 10 // Valeur par défaut
-	}
-
-	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
-	if err != nil || offset < 0 {
-		offset = 0
-	}
-
-	threads, err := models.GetThreadsByTag(tag, limit, offset)
+	// Récupérer la liste des fils de discussion
+	threads, err := models.ListThreads(c.DB, page, perPage, string(status), tag)
 	if err != nil {
-		http.Error(w, "Error fetching threads", http.StatusInternalServerError)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error listing threads: " + err.Error(),
+		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(threads)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   threads,
+	})
 }
 
-// UpdateThread met à jour un fil de discussion
-func UpdateThread(w http.ResponseWriter, r *http.Request) {
+// UpdateThread gère la mise à jour d'un fil de discussion
+func (c *ThreadController) UpdateThread(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	user, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	threadID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID du fil de discussion
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid thread ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid thread ID",
+		})
 		return
 	}
 
-	thread, err := models.GetThreadByID(threadID)
+	// Récupérer le fil de discussion
+	thread, err := models.GetThread(c.DB, id)
 	if err != nil {
-		http.Error(w, "Thread not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Thread not found",
+		})
 		return
 	}
 
-	// Vérifier si l'utilisateur est l'auteur ou un admin
-	if user.ID != thread.AuthorID && user.Role != "admin" {
-		http.Error(w, "Access denied", http.StatusForbidden)
+	// Vérifier les permissions
+	if thread.AuthorID != claims.UserID && claims.Role != "admin" {
+		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
+			Status:  "error",
+			Message: "Not authorized to update this thread",
+		})
 		return
 	}
 
-	var req CreateThreadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	var input struct {
+		Title       string   `json:"title"`
+		Description string   `json:"description"`
+		Tags        []string `json:"tags"`
+		Status      string   `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
-	// Mettre à jour le fil
-	thread.Title = req.Title
-	thread.Description = req.Description
-	thread.Tags = req.Tags
-	thread.Visibility = models.ThreadVisibility(req.Visibility)
+	// Mettre à jour le fil de discussion
+	thread.Title = input.Title
+	thread.Description = input.Description
+	thread.Tags = strings.Join(input.Tags, ",")
+	if input.Status != "" {
+		thread.Status = string(models.ThreadStatus(input.Status))
+	}
 
-	if err := thread.UpdateThread(); err != nil {
-		http.Error(w, "Error updating thread", http.StatusInternalServerError)
+	if err := thread.UpdateThread(c.DB); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error updating thread: " + err.Error(),
+		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(thread)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   thread,
+	})
 }
 
-// DeleteThread supprime un fil de discussion
-func DeleteThread(w http.ResponseWriter, r *http.Request) {
+// DeleteThread gère la suppression d'un fil de discussion
+func (c *ThreadController) DeleteThread(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	user, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	threadID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID du fil de discussion
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid thread ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid thread ID",
+		})
 		return
 	}
 
-	thread, err := models.GetThreadByID(threadID)
+	// Récupérer le fil de discussion
+	thread, err := models.GetThread(c.DB, id)
 	if err != nil {
-		http.Error(w, "Thread not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Thread not found",
+		})
 		return
 	}
 
-	// Vérifier si l'utilisateur est l'auteur ou un admin
-	if user.ID != thread.AuthorID && user.Role != "admin" {
-		http.Error(w, "Access denied", http.StatusForbidden)
+	// Vérifier les permissions
+	if thread.AuthorID != claims.UserID && claims.Role != "admin" {
+		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
+			Status:  "error",
+			Message: "Not authorized to delete this thread",
+		})
 		return
 	}
 
-	if err := thread.DeleteThread(); err != nil {
-		http.Error(w, "Error deleting thread", http.StatusInternalServerError)
+	// Supprimer le fil de discussion
+	if err := models.DeleteThread(c.DB, id); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error deleting thread: " + err.Error(),
+		})
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status:  "success",
+		Message: "Thread deleted successfully",
+	})
+}
+
+// SearchThreads gère la recherche de fils de discussion
+func (c *ThreadController) SearchThreads(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
+		return
+	}
+
+	// Récupérer les paramètres de recherche
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Search query is required",
+		})
+		return
+	}
+
+	// Récupérer les paramètres de pagination
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if perPage < 1 || perPage > 100 {
+		perPage = 10
+	}
+
+	// Rechercher les fils de discussion
+	threads, err := models.SearchThreads(c.DB, query, page, perPage)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error searching threads: " + err.Error(),
+		})
+		return
+	}
+
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   threads,
+	})
 }

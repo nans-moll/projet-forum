@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CinéForum - Discussions sur le cinéma</title>
+    <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                🎬 CinéForum
+            </div>
+            <ul class="nav-links">
+                <li><a href="/" class="active">Accueil</a></li>
+                <li><a href="/threads">Discussions</a></li>
+                <li><a href="/search">Recherche</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <a href="/login" class="btn btn-secondary">Connexion</a>
+                <a href="/register" class="btn btn-primary">Inscription</a>
+            </div>
+            <div class="user-menu" id="userMenu" style="display: none;">
+                <span id="username"></span>
+                <a href="/profile" class="btn btn-secondary">Profil</a>
+                <a href="#" class="btn btn-primary" onclick="showCreateThread()">Nouvelle discussion</a>
+                <a href="#" onclick="logout()">Déconnexion</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>🎭 Bienvenue sur CinéForum</h1>
+            <p>Partagez votre passion pour le cinéma, découvrez de nouveaux films et débattez avec d'autres cinéphiles</p>
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="number">2,847</span>
+                    <span class="label">Cinéphiles</span>
+                </div>
+                <div class="stat">
+                    <span class="number">1,243</span>
+                    <span class="label">Discussions</span>
+                </div>
+                <div class="stat">
+                    <span class="number">15,692</span>
+                    <span class="label">Critiques</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-bar">
+                <input type="text" class="search-input" placeholder="Rechercher des discussions sur vos films préférés..." id="searchInput">
+                <button class="btn btn-primary" onclick="searchThreads()">🔍 Rechercher</button>
+            </div>
+            <div class="search-filters">
+                <select class="filter-select" id="categoryFilter">
+                    <option value="">Tous les genres</option>
+                    <option value="action">Action</option>
+                    <option value="comedy">Comédie</option>
+                    <option value="drama">Drame</option>
+                    <option value="horror">Horreur</option>
+                    <option value="scifi">Science-Fiction</option>
+                    <option value="romance">Romance</option>
+                    <option value="thriller">Thriller</option>
+                    <option value="animation">Animation</option>
+                    <option value="documentary">Documentaire</option>
+                </select>
+                <select class="filter-select" id="sortFilter">
+                    <option value="recent">Plus récent</option>
+                    <option value="popular">Plus populaire</option>
+                    <option value="rating">Mieux notés</option>
+                    <option value="oldest">Plus ancien</option>
+                </select>
+                <select class="filter-select" id="pageSize">
+                    <option value="10">10 par page</option>
+                    <option value="20">20 par page</option>
+                    <option value="30">30 par page</option>
+                    <option value="all">Tout afficher</option>
+                </select>
+            </div>
+        </section>
+
+        
+        <section class="featured-section">
+            <h2>🔥 Discussions populaires</h2>
+            <div class="featured-grid">
+                <div class="featured-card">
+                    <div class="movie-poster">
+                        <div class="poster-placeholder">🎬</div>
+                    </div>
+                    <div class="featured-content">
+                        <h3>Analyse : Dune de Denis Villeneuve</h3>
+                        <p>Une discussion approfondie sur l'adaptation cinématographique du chef-d'œuvre de Frank Herbert...</p>
+                        <div class="featured-meta">
+                            <span class="author">Par CinéphileExpert</span>
+                            <span class="stats">👍 47 • 💬 23</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="featured-card">
+                    <div class="movie-poster">
+                        <div class="poster-placeholder">🦇</div>
+                    </div>
+                    <div class="featured-content">
+                        <h3>The Batman (2022) : Votre avis ?</h3>
+                        <p>Matt Reeves a-t-il réussi à renouveler le mythe du Dark Knight ? Partagez vos impressions...</p>
+                        <div class="featured-meta">
+                            <span class="author">Par BatmanFan92</span>
+                            <span class="stats">👍 35 • 💬 18</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="featured-card">
+                    <div class="movie-poster">
+                        <div class="poster-placeholder">🕷️</div>
+                    </div>
+                    <div class="featured-content">
+                        <h3>Spider-Verse : Révolution de l'animation</h3>
+                        <p>Comment Spider-Man: Into the Spider-Verse a révolutionné l'animation moderne...</p>
+                        <div class="featured-meta">
+                            <span class="author">Par AnimationLover</span>
+                            <span class="stats">👍 62 • 💬 31</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recent Discussions -->
+        <section class="threads-section">
+            <div class="threads-header">
+                <h2>🎥 Discussions récentes</h2>
+                <button class="btn btn-primary" onclick="showCreateThread()" id="createThreadBtn" style="display: none;">
+                    ➕ Nouvelle discussion
+                </button>
+            </div>
+            <div id="threadsContainer">
+                <!-- Les discussions seront chargées ici dynamiquement -->
+            </div>
+            <div class="pagination" id="pagination">
+                <!-- La pagination sera générée dynamiquement -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal de création de discussion -->
+    <div id="createThreadModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🎬 Créer une nouvelle discussion cinéma</h2>
+                <span class="close" onclick="closeModal('createThreadModal')">&times;</span>
+            </div>
+            <form id="createThreadForm">
+                <div class="form-group">
+                    <label for="threadTitle">Titre de la discussion :</label>
+                    <input type="text" id="threadTitle" name="title" placeholder="Ex: Analyse de Parasite de Bong Joon-ho" required>
+                </div>
+                <div class="form-group">
+                    <label for="movieTitle">Film concerné (optionnel) :</label>
+                    <input type="text" id="movieTitle" name="movieTitle" placeholder="Ex: Parasite (2019)">
+                </div>
+                <div class="form-group">
+                    <label for="threadDescription">Description :</label>
+                    <textarea id="threadDescription" name="description" rows="4" placeholder="Décrivez votre sujet de discussion..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="threadTags">Genres/Tags (séparés par des virgules) :</label>
+                    <input type="text" id="threadTags" name="tags" placeholder="thriller, drame, coréen, oscar">
+                </div>
+                <div class="form-group">
+                    <label for="threadCategory">Catégorie :</label>
+                    <select id="threadCategory" name="category">
+                        <option value="discussion">Discussion générale</option>
+                        <option value="review">Critique de film</option>
+                        <option value="recommendation">Recommandation</option>
+                        <option value="analysis">Analyse cinématographique</option>
+                        <option value="news">Actualités cinéma</option>
+                        <option value="help">Aide/Question</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="threadVisibility">Visibilité :</label>
+                    <select id="threadVisibility" name="visibility">
+                        <option value="public">Public</option>
+                        <option value="private">Privé (amis uniquement)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">🎬 Créer la discussion</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/css/js/app.js"></script>
+    <script>
+        // Données d'exemple pour les discussions cinéma
+        const sampleThreads = [
+            {
+                id: 1,
+                title: "Oppenheimer de Nolan : Votre avis sur ce biopic ?",
+                description: "Christopher Nolan nous livre un film sur le père de la bombe atomique...",
+                author: "NolanFan2023",
+                createdAt: "2024-12-20",
+                tags: ["biopic", "nolan", "drame", "oscar"],
+                category: "discussion",
+                status: "open",
+                messages: 28,
+                likes: 15,
+                movieTitle: "Oppenheimer (2023)"
+            },
+            {
+                id: 2,
+                title: "Les meilleurs films d'horreur de 2024",
+                description: "Partageons nos découvertes horrifiques de cette année...",
+                author: "HorrorMaster",
+                createdAt: "2024-12-19",
+                tags: ["horreur", "2024", "recommendation"],
+                category: "recommendation",
+                status: "open",
+                messages: 34,
+                likes: 22,
+                movieTitle: ""
+            },
+            {
+                id: 3,
+                title: "Analyse : La mise en scène dans Blade Runner 2049",
+                description: "Décortiquons la direction artistique de Denis Villeneuve...",
+                author: "CinéTheorist",
+                createdAt: "2024-12-18",
+                tags: ["scifi", "villeneuve", "analyse", "cinematographie"],
+                category: "analysis",
+                status: "open",
+                messages: 12,
+                likes: 18,
+                movieTitle: "Blade Runner 2049 (2017)"
+            },
+            {
+                id: 4,
+                title: "Films sous-estimés que vous devez voir",
+                description: "Quels sont vos films coup de cœur méconnus du grand public ?",
+                author: "CinémaCache",
+                createdAt: "2024-12-17",
+                tags: ["hidden-gems", "recommendation", "discussion"],
+                category: "recommendation",
+                status: "open",
+                messages: 45,
+                likes: 31,
+                movieTitle: ""
+            },
+            {
+                id: 5,
+                title: "Le cinéma français moderne : renaissance ou déclin ?",
+                description: "Débattons de l'état actuel du cinéma français...",
+                author: "FrenchCinema",
+                createdAt: "2024-12-16",
+                tags: ["français", "débat", "cinéma-contemporain"],
+                category: "discussion",
+                status: "open",
+                messages: 67,
+                likes: 28,
+                movieTitle: ""
+            }
+        ];
+
+        // Initialisation avec les données cinéma
+        document.addEventListener('DOMContentLoaded', function() {
+            loadThreads();
+            checkAuthStatus();
+        });
+
+        function loadThreads() {
+            const container = document.getElementById('threadsContainer');
+            const pageSize = parseInt(document.getElementById('pageSize').value) || 10;
+            const threadsToShow = sampleThreads.slice(0, pageSize);
+            
+            container.innerHTML = '';
+            
+            threadsToShow.forEach(thread => {
+                const threadElement = createThreadElement(thread);
+                container.appendChild(threadElement);
+            });
+        }
+
+        function createThreadElement(thread) {
+            const div = document.createElement('div');
+            div.className = 'thread-card';
+            
+            const categoryIcons = {
+                'discussion': '💬',
+                'review': '⭐',
+                'recommendation': '🎯',
+                'analysis': '🔍',
+                'news': '📰',
+                'help': '❓'
+            };
+            
+            div.innerHTML = `
+                <div class="thread-header">
+                    <div>
+                        <div class="thread-category">
+                            ${categoryIcons[thread.category]} ${thread.category.charAt(0).toUpperCase() + thread.category.slice(1)}
+                        </div>
+                        <h3 class="thread-title">${thread.title}</h3>
+                        ${thread.movieTitle ? `<div class="movie-title">🎬 ${thread.movieTitle}</div>` : ''}
+                        <div class="thread-meta">
+                            Par ${thread.author} • ${formatDate(thread.createdAt)}
+                            <span class="status-badge status-${thread.status}">${getStatusText(thread.status)}</span>
+                        </div>
+                    </div>
+                </div>
+                <p class="thread-description">${thread.description}</p>
+                <div class="thread-tags">
+                    ${thread.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                </div>
+                <div class="thread-stats">
+                    <span class="stat">💬 ${thread.messages} messages</span>
+                    <span class="stat">👍 ${thread.likes} likes</span>
+                    <span class="stat">👁️ ${Math.floor(Math.random() * 200) + 50} vues</span>
+                </div>
+            `;
+            
+            div.addEventListener('click', () => {
+                window.location.href = `/thread/${thread.id}`;
+            });
+            
+            return div;
+        }
+
+        function checkAuthStatus() {
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                document.getElementById('authButtons').style.display = 'none';
+                document.getElementById('userMenu').style.display = 'flex';
+                document.getElementById('username').textContent = 'Cinéphile';
+                document.getElementById('createThreadBtn').style.display = 'block';
+            } else {
+                document.getElementById('authButtons').style.display = 'flex';
+                document.getElementById('userMenu').style.display = 'none';
+                document.getElementById('createThreadBtn').style.display = 'none';
+            }
+        }
+
+        function showCreateThread() {
+            document.getElementById('createThreadModal').style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function searchThreads() {
+            const query = document.getElementById('searchInput').value;
+            window.location.href = `/search?q=${encodeURIComponent(query)}`;
+        }
+
+        function logout() {
+            localStorage.removeItem('jwt_token');
+            location.reload();
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('fr-FR');
+        }
+
+        function getStatusText(status) {
+            const statusTexts = {
+                'open': 'Ouvert',
+                'closed': 'Fermé',
+                'archived': 'Archivé'
+            };
+            return statusTexts[status] || status;
+        }
+
+        // Gestion du formulaire de création
+        document.getElementById('createThreadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Discussion créée avec succès ! (Fonctionalité à connecter avec le backend)');
+            closeModal('createThreadModal');
+        });
+    </script>
+</body>
+</html>

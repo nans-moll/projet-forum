@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inscription - CinéForum</title>
+    <link rel="stylesheet" href="/static/css/auth.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="auth-logo">🎭</div>
+                <h1 class="auth-title">Inscription</h1>
+                <p class="auth-subtitle">Rejoignez la communauté des cinéphiles</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+
+            <form class="auth-form" id="registerForm">
+                <div class="form-group has-icon" data-icon="👤">
+                    <label for="username">Nom d'utilisateur</label>
+                    <input type="text" id="username" name="username" required 
+                           placeholder="Choisissez votre nom d'utilisateur">
+                    <small>3-20 caractères, lettres, chiffres et _ uniquement</small>
+                </div>
+
+                <div class="form-group has-icon" data-icon="📧">
+                    <label for="email">Adresse email</label>
+                    <input type="email" id="email" name="email" required 
+                           placeholder="votre@email.com">
+                    <small>Utilisée pour la récupération de mot de passe</small>
+                </div>
+
+                <div class="form-group has-icon" data-icon="🔒">
+                    <label for="password">Mot de passe</label>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="Créez un mot de passe sécurisé">
+                    <span class="password-toggle" onclick="togglePassword('password')">👁️</span>
+                    
+                    <div class="password-requirements">
+                        <div class="requirement" id="req-length">
+                            <span class="icon">❌</span>
+                            <span>Au moins 12 caractères</span>
+                        </div>
+                        <div class="requirement" id="req-uppercase">
+                            <span class="icon">❌</span>
+                            <span>Une lettre majuscule</span>
+                        </div>
+                        <div class="requirement" id="req-special">
+                            <span class="icon">❌</span>
+                            <span>Un caractère spécial (!@#$%^&*)</span>
+                        </div>
+                        <div class="strength-meter">
+                            <div class="strength-bar" id="strengthBar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group has-icon" data-icon="🔒">
+                    <label for="confirmPassword">Confirmer le mot de passe</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required 
+                           placeholder="Confirmez votre mot de passe">
+                    <span class="password-toggle" onclick="togglePassword('confirmPassword')">👁️</span>
+                </div>
+
+                <div class="terms-checkbox">
+                    <input type="checkbox" id="terms" name="terms" required>
+                    <div class="terms-text">
+                        J'accepte les <a href="/terms" target="_blank">conditions d'utilisation</a> 
+                        et la <a href="/privacy" target="_blank">politique de confidentialité</a> 
+                        de CinéForum. Je confirme avoir au moins 13 ans.
+                    </div>
+                </div>
+
+                <div class="terms-checkbox">
+                    <input type="checkbox" id="newsletter" name="newsletter">
+                    <div class="terms-text">
+                        Je souhaite recevoir les actualités cinéma et les recommandations 
+                        personnalisées par email (optionnel).
+                    </div>
+                </div>
+
+                <button type="submit" class="auth-submit" id="submitBtn" disabled>
+                    🎬 Créer mon compte
+                </button>
+
+                <div class="loading" id="loading">
+                    Création du compte en cours...
+                </div>
+            </form>
+
+            <div class="auth-footer">
+                <p class="auth-link">
+                    Déjà membre ? 
+                    <a href="/login">Se connecter</a>
+                </p>
+                <p class="auth-link" style="margin-top: 1rem;">
+                    <a href="/">← Retour à l'accueil</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/css/js/auth.js"></script>
+    <script>
+        function togglePassword(fieldId) {
+            const passwordInput = document.getElementById(fieldId);
+            const toggle = passwordInput.nextElementSibling;
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggle.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggle.textContent = '👁️';
+            }
+        }
+
+        function showMessage(message, type = 'error') {
+            const errorDiv = document.getElementById('errorMessage');
+            const successDiv = document.getElementById('successMessage');
+            
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            
+            if (type === 'error') {
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            } else {
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+            }
+        }
+
+        function showLoading(show = true) {
+            const loading = document.getElementById('loading');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            if (show) {
+                loading.style.display = 'block';
+                submitBtn.style.display = 'none';
+            } else {
+                loading.style.display = 'none';
+                submitBtn.style.display = 'block';
+            }
+        }
+
+        function validatePassword(password) {
+            const requirements = {
+                length: password.length >= 12,
+                uppercase: /[A-Z]/.test(password),
+                special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+            };
+
+            // Mise à jour visuelle des exigences
+            document.getElementById('req-length').classList.toggle('valid', requirements.length);
+            document.getElementById('req-length').classList.toggle('invalid', !requirements.length);
+            document.getElementById('req-length').querySelector('.icon').textContent = requirements.length ? '✅' : '❌';
+
+            document.getElementById('req-uppercase').classList.toggle('valid', requirements.uppercase);
+            document.getElementById('req-uppercase').classList.toggle('invalid', !requirements.uppercase);
+            document.getElementById('req-uppercase').querySelector('.icon').textContent = requirements.uppercase ? '✅' : '❌';
+
+            document.getElementById('req-special').classList.toggle('valid', requirements.special);
+            document.getElementById('req-special').classList.toggle('invalid', !requirements.special);
+            document.getElementById('req-special').querySelector('.icon').textContent = requirements.special ? '✅' : '❌';
+
+            // Calcul de la force du mot de passe
+            const score = Object.values(requirements).filter(Boolean).length;
+            const strengthBar = document.getElementById('strengthBar');
+            
+            strengthBar.className = 'strength-bar';
+            if (score === 1) strengthBar.classList.add('strength-weak');
+            else if (score === 2) strengthBar.classList.add('strength-fair');
+            else if (score === 3 && password.length >= 16) strengthBar.classList.add('strength-strong');
+            else if (score === 3) strengthBar.classList.add('strength-good');
+
+            return Object.values(requirements).every(Boolean);
+        }
+
+        function validateForm() {
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const terms = document.getElementById('terms').checked;
+
+            const isUsernameValid = username.length >= 3 && username.length <= 20 && /^[a-zA-Z0-9_]+$/.test(username);
+            const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+            const isPasswordValid = validatePassword(password);
+            const isPasswordMatch = password === confirmPassword;
+            const isTermsAccepted = terms;
+
+            const isFormValid = isUsernameValid && isEmailValid && isPasswordValid && isPasswordMatch && isTermsAccepted;
+            
+            document.getElementById('submitBtn').disabled = !isFormValid;
+            return isFormValid;
+        }
+
+        // Event listeners
+        document.getElementById('username').addEventListener('input', function() {
+            const username = this.value;
+            const isValid = username.length >= 3 && username.length <= 20 && /^[a-zA-Z0-9_]+$/.test(username);
+            
+            this.style.borderColor = username.length > 0 ? (isValid ? '#10b981' : '#ef4444') : '';
+            validateForm();
+        });
+
+        document.getElementById('email').addEventListener('input', function() {
+            const email = this.value;
+            const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+            
+            this.style.borderColor = email.length > 0 ? (isValid ? '#10b981' : '#ef4444') : '';
+            validateForm();
+        });
+
+        document.getElementById('password').addEventListener('input', function() {
+            validateForm();
+        });
+
+        document.getElementById('confirmPassword').addEventListener('input', function() {
+            const password = document.getElementById('password').value;
+            const confirmPassword = this.value;
+            const isMatch = password === confirmPassword;
+            
+            this.style.borderColor = confirmPassword.length > 0 ? (isMatch ? '#10b981' : '#ef4444') : '';
+            validateForm();
+        });
+
+        document.getElementById('terms').addEventListener('change', validateForm);
+
+        document.getElementById('registerForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!validateForm()) {
+                showMessage('Veuillez corriger les erreurs dans le formulaire', 'error');
+                return;
+            }
+            
+            const formData = new FormData(e.target);
+            const userData = {
+                username: formData.get('username'),
+                email: formData.get('email'),
+                password: formData.get('password'),
+                newsletter: formData.get('newsletter') ? true : false
+            };
+            
+            // Ajout des logs de débogage
+            console.log('Données du formulaire:', userData);
+            
+            showLoading(true);
+            
+            try {
+                console.log('Envoi de la requête à /api/auth/register');
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(userData)
+                });
+                
+                console.log('Réponse reçue:', response.status);
+                const data = await response.json();
+                console.log('Données de la réponse:', data);
+                
+                if (response.ok && data.status === 'success') {
+                    showMessage('Compte créé avec succès ! Redirection vers la connexion...', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = '/login?message=account_created';
+                    }, 2000);
+                    
+                } else {
+                    showMessage(data.message || 'Erreur lors de la création du compte', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Erreur détaillée:', error);
+                showMessage('Erreur de connexion. Veuillez réessayer.', 'error');
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        // Animation d'entrée
+        document.addEventListener('DOMContentLoaded', function() {
+            const card = document.querySelector('.auth-card');
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                card.style.transition = 'all 0.6s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, 100);
+
+            // Vérifier si l'utilisateur est déjà connecté
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                showMessage('Vous êtes déjà connecté. Redirection...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1500);
+            }
+        });
+    </script>
+</body>
+</html>

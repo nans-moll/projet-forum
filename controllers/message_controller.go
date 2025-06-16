@@ -1,210 +1,382 @@
 package controllers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
+
 	"projet-forum/middleware"
 	"projet-forum/models"
-	"strconv"
 )
 
-type CreateMessageRequest struct {
-	Content  string `json:"content"`
-	ImageURL string `json:"image_url,omitempty"`
+type MessageController struct {
+	DB *sql.DB
 }
 
-func CreateMessage(w http.ResponseWriter, r *http.Request) {
+// CreateMessage gère la création d'un nouveau message
+func (c *MessageController) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	user, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	threadID, err := strconv.Atoi(r.URL.Query().Get("thread_id"))
+	var input struct {
+		Content  string `json:"content"`
+		ThreadID int64  `json:"thread_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// Vérifier si le fil de discussion existe et est ouvert
+	thread, err := models.GetThread(c.DB, input.ThreadID)
 	if err != nil {
-		http.Error(w, "Invalid thread ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Thread not found",
+		})
 		return
 	}
 
-	thread, err := models.GetThreadByID(threadID)
+	if thread.Status == "closed" {
+		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
+			Status:  "error",
+			Message: "Thread is closed",
+		})
+		return
+	}
+
+	// Créer le message
+	message, err := models.CreateMessage(c.DB, input.ThreadID, claims.UserID, input.Content, "")
 	if err != nil {
-		http.Error(w, "Thread not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error creating message: " + err.Error(),
+		})
 		return
 	}
 
-	if thread.Status != models.ThreadOpen {
-		http.Error(w, "Thread is closed or archived", http.StatusForbidden)
-		return
-	}
-
-	var req CreateMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Content) < 1 {
-		http.Error(w, "Message content cannot be empty", http.StatusBadRequest)
-		return
-	}
-
-	message := &models.Message{
-		ThreadID: threadID,
-		AuthorID: user.ID,
-		Content:  req.Content,
-		ImageURL: req.ImageURL,
-	}
-
-	if err := message.CreateMessage(); err != nil {
-		http.Error(w, "Error creating message", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(message)
+	middleware.SendJSON(w, http.StatusCreated, middleware.Response{
+		Status: "success",
+		Data:   message,
+	})
 }
 
-func GetMessages(w http.ResponseWriter, r *http.Request) {
+// GetMessage gère la récupération d'un message
+func (c *MessageController) GetMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	threadID, err := strconv.Atoi(r.URL.Query().Get("thread_id"))
+	// Récupérer l'ID du message
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid thread ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid message ID",
+		})
 		return
 	}
 
-	thread, err := models.GetThreadByID(threadID)
+	// Récupérer le message
+	message, err := models.GetMessage(c.DB, id)
 	if err != nil {
-		http.Error(w, "Thread not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Message not found",
+		})
 		return
 	}
 
-	if thread.Visibility == models.ThreadPrivate {
-		user, ok := middleware.GetUserFromContext(r.Context())
-		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   message,
+	})
+}
 
-		if user.ID != thread.AuthorID {
-			http.Error(w, "Access denied", http.StatusForbidden)
-			return
-		}
+// ListMessages gère la liste des messages d'un fil de discussion
+func (c *MessageController) ListMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
+		return
 	}
 
-	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
-	if err != nil || limit <= 0 {
-		limit = 10
+	// Récupérer l'ID du fil de discussion
+	threadIDStr := r.URL.Query().Get("thread_id")
+	threadID, err := strconv.ParseInt(threadIDStr, 10, 64)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid thread ID",
+		})
+		return
 	}
 
-	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
-	if err != nil || offset < 0 {
-		offset = 0
+	// Récupérer les paramètres de pagination
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
 	}
 
+	perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+	if perPage < 1 || perPage > 100 {
+		perPage = 10
+	}
+
+	// Récupérer le paramètre de tri
 	sortBy := r.URL.Query().Get("sort")
 	if sortBy == "" {
 		sortBy = "newest"
 	}
 
-	messages, err := models.GetMessagesByThreadID(threadID, limit, offset, sortBy)
+	// Récupérer la liste des messages
+	messages, err := models.ListMessages(c.DB, threadID, page, perPage, sortBy)
 	if err != nil {
-		http.Error(w, "Error fetching messages", http.StatusInternalServerError)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error listing messages: " + err.Error(),
+		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(messages)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   messages,
+	})
 }
 
-func UpdateMessage(w http.ResponseWriter, r *http.Request) {
+// UpdateMessage gère la mise à jour d'un message
+func (c *MessageController) UpdateMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	user, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	messageID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID du message
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid message ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid message ID",
+		})
 		return
 	}
 
-	message, err := models.GetMessageByID(messageID)
+	// Récupérer le message
+	message, err := models.GetMessage(c.DB, id)
 	if err != nil {
-		http.Error(w, "Message not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Message not found",
+		})
 		return
 	}
 
-	if user.ID != message.AuthorID && user.Role != "admin" {
-		http.Error(w, "Access denied", http.StatusForbidden)
+	// Vérifier les permissions
+	if message.AuthorID != claims.UserID && claims.Role != "admin" {
+		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
+			Status:  "error",
+			Message: "Not authorized to update this message",
+		})
 		return
 	}
 
-	var req CreateMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	var input struct {
+		Content string `json:"content"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
 		return
 	}
 
-	message.Content = req.Content
-	message.ImageURL = req.ImageURL
-
-	if err := message.UpdateMessage(); err != nil {
-		http.Error(w, "Error updating message", http.StatusInternalServerError)
+	// Mettre à jour le message
+	message.Content = input.Content
+	if err := message.UpdateMessage(c.DB); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error updating message: " + err.Error(),
+		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(message)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   message,
+	})
 }
 
-func DeleteMessage(w http.ResponseWriter, r *http.Request) {
+// DeleteMessage gère la suppression d'un message
+func (c *MessageController) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	user, ok := middleware.GetUserFromContext(r.Context())
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	messageID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID du message
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid message ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid message ID",
+		})
 		return
 	}
 
-	message, err := models.GetMessageByID(messageID)
+	// Récupérer le message
+	message, err := models.GetMessage(c.DB, id)
 	if err != nil {
-		http.Error(w, "Message not found", http.StatusNotFound)
+		middleware.SendJSON(w, http.StatusNotFound, middleware.Response{
+			Status:  "error",
+			Message: "Message not found",
+		})
 		return
 	}
 
-	if user.ID != message.AuthorID && user.Role != "admin" {
-		http.Error(w, "Access denied", http.StatusForbidden)
+	// Vérifier les permissions
+	if message.AuthorID != claims.UserID && claims.Role != "admin" {
+		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
+			Status:  "error",
+			Message: "Not authorized to delete this message",
+		})
 		return
 	}
 
-	if err := message.DeleteMessage(); err != nil {
-		http.Error(w, "Error deleting message", http.StatusInternalServerError)
+	// Supprimer le message
+	if err := models.DeleteMessage(c.DB, id); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error deleting message: " + err.Error(),
+		})
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status:  "success",
+		Message: "Message deleted successfully",
+	})
+}
+
+// VoteMessage gère le vote sur un message
+func (c *MessageController) VoteMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
+		return
+	}
+
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
+		return
+	}
+
+	var input struct {
+		MessageID int64  `json:"message_id"`
+		VoteType  string `json:"vote_type"` // "like" ou "dislike"
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	// Vérifier le type de vote
+	if input.VoteType != "like" && input.VoteType != "dislike" {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid vote type",
+		})
+		return
+	}
+
+	// Ajouter ou mettre à jour le vote
+	if err := models.AddMessageReaction(c.DB, input.MessageID, claims.UserID, input.VoteType); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error voting on message: " + err.Error(),
+		})
+		return
+	}
+
+	// Mettre à jour les compteurs
+	if err := models.UpdateMessageReactionCount(c.DB, input.MessageID); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error updating message reaction count: " + err.Error(),
+		})
+		return
+	}
+
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status:  "success",
+		Message: "Vote recorded successfully",
+	})
 }
