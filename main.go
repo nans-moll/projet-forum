@@ -6,89 +6,51 @@ import (
 	"net/http"
 )
 
-// Fonction principale qui initialise le serveur et définit les routes.
 func main() {
-	// Gestion des fichiers statiques (CSS, JS, images)
-	fileServer := http.FileServer(http.Dir("./static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fileServer))
+	// Fichiers statiques
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
-	// Routes principales du forum cinéma
-	http.HandleFunc("/", HomePage)
-	http.HandleFunc("/threads", ThreadsPage)
-	http.HandleFunc("/thread/", ThreadViewPage)
-	http.HandleFunc("/login", LoginPage)
-	http.HandleFunc("/register", RegisterPage)
-	http.HandleFunc("/admin", AdminDashboard)
-	http.HandleFunc("/profile", ProfilePage)
-	http.HandleFunc("/search", SearchPage)
+	// REDIRECTION AUTOMATIQUE VERS REGISTER
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		// Redirection automatique vers la page register
+		http.Redirect(w, r, "/register", http.StatusSeeOther)
+	})
 
-	// Routes API
-	http.HandleFunc("/api/auth/login", HandleLogin)
-	http.HandleFunc("/api/auth/register", HandleRegister)
-	http.HandleFunc("/api/threads", HandleThreads)
-	http.HandleFunc("/api/messages", HandleMessages)
-	http.HandleFunc("/api/likes", HandleLikes)
 
-	// Démarrage du serveur sur le port 8080
-	fmt.Println("🎬 CinéForum démarré sur http://localhost:8080")
+	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+
+			http.ServeFile(w, r, "./views/layouts/auth/register.html")
+		} else if r.Method == "POST" {
+			// Traitement du formulaire d'inscription
+			fmt.Fprintf(w, "📝 Inscription reçue - Utilisateur créé avec succès !")
+		}
+	})
+
+	// Page de connexion
+	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			http.ServeFile(w, r, "./views/layouts/auth/login.html")
+		} else if r.Method == "POST" {
+			fmt.Fprintf(w, "🔐 Connexion reçue")
+		}
+	})
+
+	// Autres routes
+	http.HandleFunc("/threads", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "💬 Page des discussions")
+	})
+
+	http.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "⚙️ Administration")
+	})
+
+	// Démarrage
+	fmt.Println("🚀 CinéForum démarré sur http://localhost:8080")
+	fmt.Println("📝 Redirection automatique vers la page d'inscription")
 	log.Fatal(http.ListenAndServe(":8080", nil))
-}
-
-// Handlers temporaires (à remplacer par vos vrais controllers)
-func HomePage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/index.html")
-}
-
-func ThreadsPage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/threads/index.html")
-}
-
-func ThreadViewPage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/threads/show.html")
-}
-
-func LoginPage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/auth/login.html")
-}
-
-func RegisterPage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/auth/register.html")
-}
-
-func AdminDashboard(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/admin/dashboard.html")
-}
-
-func ProfilePage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/users/profile.html")
-}
-
-func SearchPage(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "./views/layouts/search/index.html")
-}
-
-// Handlers API temporaires
-func HandleLogin(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "success", "token": "fake_jwt_token"}`))
-}
-
-func HandleRegister(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "success", "message": "Compte créé avec succès"}`))
-}
-
-func HandleThreads(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"threads": []}`))
-}
-
-func HandleMessages(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"messages": []}`))
-}
-
-func HandleLikes(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"status": "success"}`))
 }

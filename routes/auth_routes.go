@@ -1,10 +1,11 @@
-package main
+package routes
 
-type User struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	nickname string `'json:"nickname"`
-	Password string `json:"password"`
+import (
+	"net/http"
+	"projet-forum/controllers"
+)
+
+func RegisterAuthRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/login", controllers.Login)
+	mux.HandleFunc("/register", controllers.Register)
 }
-type Thread struct {
