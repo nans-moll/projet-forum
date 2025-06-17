@@ -7,13 +7,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 
 	"projet-forum/controllers"
-	"projet-forum/middleware"
+	"projet-forum/routes"
 )
 
 func main() {
@@ -42,93 +43,92 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Initialiser les contrôleurs
+	authController := &controllers.AuthController{DB: db}
+	userController := &controllers.UserController{DB: db}
+	threadController := &controllers.ThreadController{DB: db}
+	statsController := &controllers.StatsController{DB: db}
+	adminController := &controllers.AdminController{DB: db}
+
 	// Créer le routeur
 	router := mux.NewRouter()
 
-	// Servir les fichiers statiques
-	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-
-	// Configuration des templates
-	tmpl := template.Must(template.ParseGlob("views/layouts/*.html"))
-	tmplAuth := template.Must(template.ParseGlob("views/layouts/auth/*.html"))
-
-	// Route pour la page d'accueil
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		tmpl.ExecuteTemplate(w, "index.html", nil)
-	}).Methods("GET")
-
-	// Route pour la page alternative
-	router.HandleFunc("/page1", func(w http.ResponseWriter, r *http.Request) {
-		tmpl.ExecuteTemplate(w, "Page_1.html", nil)
-	}).Methods("GET")
-
-	// Routes d'authentification
-	router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		tmplAuth.ExecuteTemplate(w, "login.html", nil)
-	}).Methods("GET")
-
-	router.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
-		tmplAuth.ExecuteTemplate(w, "register.html", nil)
-	}).Methods("GET")
-
-	// Middleware CORS
+	// Configuration des types MIME
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
+			path := r.URL.Path
+			switch {
+			case strings.HasSuffix(path, ".js"):
+				w.Header().Set("Content-Type", "application/javascript")
+			case strings.HasSuffix(path, ".css"):
+				w.Header().Set("Content-Type", "text/css")
+			case strings.HasSuffix(path, ".html"):
+				w.Header().Set("Content-Type", "text/html")
 			}
 			next.ServeHTTP(w, r)
 		})
 	})
 
-	// Initialisation des contrôleurs
-	authController := &controllers.AuthController{DB: db}
-	userController := &controllers.UserController{DB: db}
-	threadController := &controllers.ThreadController{DB: db}
-	messageController := &controllers.MessageController{DB: db}
-	searchController := &controllers.SearchController{DB: db}
+	// Servir les fichiers statiques
+	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	// Routes publiques
-	router.HandleFunc("/api/auth/register", authController.Register).Methods("POST")
-	router.HandleFunc("/api/auth/login", authController.Login).Methods("POST")
+	// Configuration des templates
+	tmpl := template.New("").Funcs(template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+	})
 
-	// Routes protégées
-	router.Handle("/api/users/me", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserProfile))).Methods("GET")
-	router.Handle("/api/users/me", middleware.AuthMiddleware(http.HandlerFunc(userController.UpdateUserProfile))).Methods("PUT")
-	router.Handle("/api/users/stats", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserStats))).Methods("GET")
-	router.Handle("/api/users/threads", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserThreads))).Methods("GET")
-	router.Handle("/api/users/messages", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserMessages))).Methods("GET")
-
-	// Routes des fils de discussion
-	router.HandleFunc("/api/threads", threadController.ListThreads).Methods("GET")
-	router.Handle("/api/threads", middleware.AuthMiddleware(http.HandlerFunc(threadController.CreateThread))).Methods("POST")
-	router.HandleFunc("/api/threads/{id}", threadController.GetThread).Methods("GET")
-	router.Handle("/api/threads/{id}", middleware.AuthMiddleware(http.HandlerFunc(threadController.UpdateThread))).Methods("PUT")
-	router.Handle("/api/threads/{id}", middleware.AuthMiddleware(http.HandlerFunc(threadController.DeleteThread))).Methods("DELETE")
-
-	// Routes des messages
-	router.HandleFunc("/api/threads/{id}/messages", messageController.ListMessages).Methods("GET")
-	router.Handle("/api/threads/{id}/messages", middleware.AuthMiddleware(http.HandlerFunc(messageController.CreateMessage))).Methods("POST")
-	router.Handle("/api/messages/{id}", middleware.AuthMiddleware(http.HandlerFunc(messageController.UpdateMessage))).Methods("PUT")
-	router.Handle("/api/messages/{id}", middleware.AuthMiddleware(http.HandlerFunc(messageController.DeleteMessage))).Methods("DELETE")
-	router.Handle("/api/messages/{id}/vote", middleware.AuthMiddleware(http.HandlerFunc(messageController.VoteMessage))).Methods("POST")
-
-	// Routes de recherche
-	router.HandleFunc("/api/search", searchController.SearchThreads).Methods("GET")
-
-	// Récupérer le port depuis les variables d'environnement
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// Charger tous les templates
+	templateFiles := []string{
+		"templates/index.html",
+		"templates/threads/show.html",
+		"templates/threads/edit.html",
+		"templates/threads/create.html",
 	}
 
+	for _, file := range templateFiles {
+		_, err := tmpl.ParseFiles(file)
+		if err != nil {
+			log.Printf("Erreur lors du chargement du template %s: %v", file, err)
+		}
+	}
+
+	// Configuration des routes
+	routes.SetupAPIRoutes(router, authController, threadController, statsController, userController)
+	routes.SetupAuthRoutes(router, authController)
+	routes.SetupAdminRoutes(router, adminController)
+
+	// Route pour la page d'accueil
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if err := tmpl.ExecuteTemplate(w, "index.html", nil); err != nil {
+			log.Printf("Erreur lors du rendu de index.html: %v", err)
+			http.Error(w, "Erreur serveur", http.StatusInternalServerError)
+		}
+	}).Methods("GET")
+
+	// Route pour la page de discussion
+	router.HandleFunc("/threads/show/{id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		threadID := vars["id"]
+		log.Printf("Affichage de la discussion %s", threadID)
+
+		if err := tmpl.ExecuteTemplate(w, "show.html", nil); err != nil {
+			log.Printf("Erreur lors du rendu de show.html: %v", err)
+			http.Error(w, "Erreur serveur", http.StatusInternalServerError)
+		}
+	}).Methods("GET")
+
+	// Route pour la page de liste des discussions
+	router.HandleFunc("/threads", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Affichage de la page d'accueil")
+		if err := tmpl.ExecuteTemplate(w, "index.html", nil); err != nil {
+			log.Printf("Erreur lors du rendu de index.html: %v", err)
+			http.Error(w, "Erreur serveur", http.StatusInternalServerError)
+		}
+	}).Methods("GET")
+
 	// Démarrer le serveur
-	fmt.Printf("🚀 Serveur démarré sur http://localhost:%s\n", port)
-	fmt.Printf("📝 Documentation disponible sur http://localhost:%s/api/docs\n", port)
-	fmt.Printf("💻 Interface utilisateur disponible sur http://localhost:%s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, router))
+	fmt.Println("Serveur démarré sur http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", router))
 }

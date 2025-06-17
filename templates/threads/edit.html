@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modifier la discussion - CinéForum</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                🎬 CinéForum
+            </div>
+            <ul class="nav-links">
+                <li><a href="/">Accueil</a></li>
+                <li><a href="/threads" class="active">Discussions</a></li>
+                <li><a href="/search">Recherche</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <a href="/login" class="btn btn-secondary">Connexion</a>
+                <a href="/register" class="btn btn-primary">Inscription</a>
+            </div>
+            <div class="user-menu" id="userMenu" style="display: none;">
+                <span id="username"></span>
+                <a href="/profile" class="btn btn-secondary">Profil</a>
+                <a href="#" class="btn btn-primary" onclick="showCreateThread()">Nouvelle discussion</a>
+                <a href="#" onclick="logout()">Déconnexion</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="form-container">
+            <h1>Modifier la discussion</h1>
+            <form id="editThreadForm">
+                <div class="form-group">
+                    <label for="title">Titre :</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description :</label>
+                    <textarea id="description" name="description" rows="6" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="tags">Tags (séparés par des virgules) :</label>
+                    <input type="text" id="tags" name="tags" placeholder="ex: film, cinéma, action">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                    <a href="#" onclick="history.back()" class="btn btn-secondary">Annuler</a>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- Scripts -->
+    <script src="/static/css/js/api.js"></script>
+    <script src="/static/css/js/auth.js"></script>
+    <script>
+        // Vérification de l'état de l'authentification au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+            loadThread();
+        });
+
+        // Fonction pour charger la discussion
+        async function loadThread() {
+            try {
+                const threadId = window.location.pathname.split('/')[2];
+                const response = await api.threads.getById(threadId);
+                const thread = response.data;
+
+                // Vérifier si l'utilisateur est l'auteur
+                const token = localStorage.getItem('token');
+                if (token) {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    if (payload.id !== thread.author_id) {
+                        window.location.href = `/threads/${threadId}`;
+                        return;
+                    }
+                }
+
+                // Remplir le formulaire
+                document.getElementById('title').value = thread.title;
+                document.getElementById('description').value = thread.description;
+                document.getElementById('tags').value = thread.tags.join(', ');
+            } catch (error) {
+                console.error('Erreur lors du chargement de la discussion:', error);
+                alert('Une erreur est survenue lors du chargement de la discussion.');
+            }
+        }
+
+        // Gestion du formulaire de modification
+        document.getElementById('editThreadForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const threadId = window.location.pathname.split('/')[2];
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const tags = document.getElementById('tags').value.split(',').map(tag => tag.trim());
+            
+            try {
+                await api.threads.update(threadId, title, description, tags);
+                window.location.href = `/threads/${threadId}`;
+            } catch (error) {
+                console.error('Erreur lors de la modification de la discussion:', error);
+                alert('Une erreur est survenue lors de la modification de la discussion.');
+            }
+        });
+    </script>
+</body>
+</html>

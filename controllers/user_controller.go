@@ -3,6 +3,7 @@ package controllers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"projet-forum/middleware"
 	"projet-forum/models"
@@ -64,7 +65,7 @@ func (c *UserController) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Email    string `json:"email"`
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 
@@ -76,17 +77,9 @@ func (c *UserController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authentifier l'utilisateur
-	user, err := models.GetUserByEmail(c.DB, input.Email)
+	// Vérifier les identifiants
+	user, err := models.AuthenticateUser(c.DB, input.Username, input.Password)
 	if err != nil {
-		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
-			Status:  "error",
-			Message: "Invalid credentials",
-		})
-		return
-	}
-
-	if !user.CheckPassword(input.Password) {
 		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
 			Status:  "error",
 			Message: "Invalid credentials",
@@ -95,7 +88,7 @@ func (c *UserController) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Générer le token JWT
-	token, err := middleware.GenerateToken(user)
+	token, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
 			Status:  "error",
@@ -104,10 +97,33 @@ func (c *UserController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Créer le cookie de session
+	sessionCookie := &http.Cookie{
+		Name:     "session",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   86400, // 24 heures
+	}
+	http.SetCookie(w, sessionCookie)
+
+	// Mettre à jour la dernière connexion
+	if err := models.UpdateLastConnection(c.DB, user.ID); err != nil {
+		fmt.Printf("[DEBUG] Login - Erreur lors de la mise à jour de la dernière connexion: %v\n", err)
+	}
+
 	middleware.SendJSON(w, http.StatusOK, middleware.Response{
 		Status: "success",
-		Data: map[string]string{
+		Data: map[string]interface{}{
 			"token": token,
+			"user": map[string]interface{}{
+				"id":       user.ID,
+				"username": user.Username,
+				"email":    user.Email,
+				"role":     user.Role,
+			},
 		},
 	})
 }
@@ -336,27 +352,31 @@ func (c *UserController) ListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetUserProfile récupère le profil d'un utilisateur
+// GetUserProfile récupère les informations du profil de l'utilisateur
 func (c *UserController) GetUserProfile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
 		return
 	}
 
-	userID, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	// Récupérer les informations de l'utilisateur
+	user, err := models.GetUserByID(c.DB, claims.UserID)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user profile",
+		})
 		return
 	}
 
-	user, err := models.GetUserByID(c.DB, userID)
-	if err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   user,
+	})
 }
 
 // UpdateUserProfile met à jour le profil d'un utilisateur
@@ -756,5 +776,74 @@ func (c *UserController) AddMessageReaction(w http.ResponseWriter, r *http.Reque
 	middleware.SendJSON(w, http.StatusOK, middleware.Response{
 		Status:  "success",
 		Message: "Message reaction added successfully",
+	})
+}
+
+// ShowProfilePage affiche la page de profil de l'utilisateur
+func (c *UserController) ShowProfilePage(w http.ResponseWriter, r *http.Request) {
+	// Vérifier l'authentification via le cookie de session
+	if _, err := r.Cookie("session"); err != nil {
+		// Rediriger vers la page de connexion si pas de session
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Vérifier le token JWT
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		// Rediriger vers la page de connexion si token invalide
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Servir la page de profil
+	http.ServeFile(w, r, "templates/users/profile.html")
+}
+
+// ShowLoginPage affiche la page de connexion
+func (c *UserController) ShowLoginPage(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/users/login.html")
+}
+
+// ShowRegisterPage affiche la page d'inscription
+func (c *UserController) ShowRegisterPage(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/users/register.html")
+}
+
+// ShowAdminDashboard affiche le tableau de bord administrateur
+func (c *UserController) ShowAdminDashboard(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/admin/dashboard.html")
+}
+
+// BanUser bannit un utilisateur
+func (c *UserController) BanUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
+		return
+	}
+
+	userID, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid user ID",
+		})
+		return
+	}
+
+	if err := models.BanUser(c.DB, userID); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error banning user",
+		})
+		return
+	}
+
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status:  "success",
+		Message: "User banned successfully",
 	})
 }

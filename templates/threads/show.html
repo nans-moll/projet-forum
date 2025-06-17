@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Thread.Title}} - Forum</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+    <header>
+            <nav>
+                <a href="/" class="logo">Forum</a>
+                <div class="nav-links">
+                    <a href="/" class="nav-link">Accueil</a>
+                    <a href="/search" class="nav-link">Rechercher</a>
+                    <div id="authButtons">
+                        <a href="/login" class="nav-link">Connexion</a>
+                        <a href="/register" class="nav-link">Inscription</a>
+            </div>
+                    <div id="userMenu" style="display: none;">
+                        <span id="username"></span>
+                        <a href="/profile" class="nav-link">Profil</a>
+                        <button onclick="logout()" class="nav-link">Déconnexion</button>
+            </div>
+            </div>
+        </nav>
+    </header>
+
+        <main>
+            <div class="thread-details">
+                <h1>{{.Thread.Title}}</h1>
+            <div class="thread-meta">
+                    <span>Par {{.Thread.AuthorName}}</span>
+                    <span>•</span>
+                    <span>{{.Thread.CreatedAt}}</span>
+                    <span>•</span>
+                    <span>{{.Thread.Views}} vues</span>
+                </div>
+                <div class="thread-content">
+                    {{.Thread.Content}}
+                </div>
+                <div class="thread-tags">
+                    {{range .Thread.Tags}}
+                    <span class="tag">{{.}}</span>
+                    {{end}}
+                </div>
+            </div>
+
+            <div class="messages-container">
+                <h2>Réponses {{if .Messages}}({{len .Messages}}){{end}}</h2>
+                {{if and .Messages (gt (len .Messages) 0)}}
+                    {{range .Messages}}
+                    <div class="message" data-message-id="{{.ID}}">
+                        <div class="message-header">
+                            <div class="message-author">
+                                <span class="author-name">{{.Author.Username}}</span>
+                            </div>
+                            <span class="message-date">{{.CreatedAt}}</span>
+                        </div>
+                        <div class="message-content">
+                            {{.Content}}
+                        </div>
+                        {{if $.IsAuthenticated}}
+                        <div class="message-actions">
+                            <button class="like-btn" onclick="likeMessage('{{.ID}}')">
+                                <i class="fas fa-thumbs-up"></i>
+                                <span>{{.Likes}}</span>
+                            </button>
+                            <button class="dislike-btn" onclick="dislikeMessage('{{.ID}}')">
+                                <i class="fas fa-thumbs-down"></i>
+                                <span>{{.Dislikes}}</span>
+                            </button>
+            </div>
+                        {{end}}
+                    </div>
+                    {{end}}
+                {{else}}
+                    <div class="no-messages">
+                        <p>Aucune réponse pour le moment. Soyez le premier à répondre !</p>
+                    </div>
+                {{end}}
+        </div>
+
+            {{if .IsAuthenticated}}
+            <div class="reply-section">
+                <h3>Répondre à la discussion</h3>
+                <div class="message-form">
+                    <form id="replyForm" onsubmit="submitReply(event)">
+                        <textarea 
+                            id="messageContent" 
+                            placeholder="Partagez votre point de vue sur ce sujet..." 
+                            required
+                        ></textarea>
+                        <button type="submit">
+                            <i class="fas fa-paper-plane"></i>
+                            Publier ma réponse
+                        </button>
+                    </form>
+        </div>
+            </div>
+            {{else}}
+            <div class="reply-section">
+                <h3>Participer à la discussion</h3>
+                <div class="message-form">
+                    <div class="login-prompt">
+                        <p>Pour participer à la discussion, veuillez vous <a href="/login">connecter</a> ou <a href="/register">créer un compte</a>.</p>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </main>
+        </div>
+
+    <!-- Messages d'erreur et de succès -->
+    <div id="errorMessage" class="message error" style="display: none;"></div>
+    <div id="successMessage" class="message success" style="display: none;"></div>
+    <div id="loading" class="loading" style="display: none;">Chargement...</div>
+
+    <!-- Scripts -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+    function submitReply(event) {
+        event.preventDefault();
+        const content = document.getElementById('messageContent').value;
+        
+        fetch('/api/threads/{{.Thread.ID}}/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+            },
+            body: JSON.stringify({ content })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert(data.message || 'Une erreur est survenue');
+                }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Une erreur est survenue');
+        });
+    }
+
+    function likeMessage(messageId) {
+        fetch(`/api/messages/${messageId}/like`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert(data.message || 'Une erreur est survenue');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Une erreur est survenue');
+        });
+    }
+
+    function dislikeMessage(messageId) {
+        fetch(`/api/messages/${messageId}/dislike`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + localStorage.getItem('jwt_token')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                window.location.reload();
+            } else {
+                alert(data.message || 'Une erreur est survenue');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Une erreur est survenue');
+        });
+        }
+    </script>
+</body>
+</html>

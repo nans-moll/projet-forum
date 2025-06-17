@@ -4,6 +4,11 @@ import (
 	"database/sql"
 	"time"
 
+	"crypto/sha512"
+	"encoding/hex"
+
+	"fmt"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -11,7 +16,7 @@ type User struct {
 	ID             int64     `json:"id"`
 	Username       string    `json:"username"`
 	Email          string    `json:"email"`
-	Password       string    `json:"-"`
+	PasswordHash   string    `json:"-"`
 	Role           string    `json:"role"`
 	Banned         bool      `json:"banned"`
 	ThreadCount    int       `json:"thread_count"`
@@ -31,7 +36,7 @@ func (User) TableName() string {
 // CreateUser crée un nouvel utilisateur
 func CreateUser(db *sql.DB, username, email, password, role string) (*User, error) {
 	query := `
-		INSERT INTO users (username, email, password, role, banned, thread_count, message_count, last_connection)
+		INSERT INTO users (username, email, password_hash, role, is_banned, thread_count, message_count, last_connection)
 		VALUES (?, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP)
 	`
 	result, err := db.Exec(query, username, email, password, role, false)
@@ -50,7 +55,7 @@ func CreateUser(db *sql.DB, username, email, password, role string) (*User, erro
 // GetUserByID récupère un utilisateur par son ID
 func GetUserByID(db *sql.DB, id int64) (*User, error) {
 	query := `
-		SELECT id, username, email, password, role, is_banned, thread_count, message_count, last_connection, created_at, updated_at
+		SELECT id, username, email, password_hash, role, is_banned, thread_count, message_count, last_connection, created_at
 		FROM users
 		WHERE id = ?
 	`
@@ -59,14 +64,13 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 		&user.ID,
 		&user.Username,
 		&user.Email,
-		&user.Password,
+		&user.PasswordHash,
 		&user.Role,
 		&user.Banned,
 		&user.ThreadCount,
 		&user.MessageCount,
 		&user.LastConnection,
 		&user.CreatedAt,
-		&user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -77,7 +81,7 @@ func GetUserByID(db *sql.DB, id int64) (*User, error) {
 // GetUserByEmail récupère un utilisateur par son email
 func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 	query := `
-		SELECT id, username, email, password_hash, role, is_banned, thread_count, message_count, last_connection, created_at, updated_at
+		SELECT id, username, email, password_hash, role, is_banned, thread_count, message_count, last_connection, created_at
 		FROM users WHERE email = ?
 	`
 	user := &User{}
@@ -85,14 +89,13 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 		&user.ID,
 		&user.Username,
 		&user.Email,
-		&user.Password,
+		&user.PasswordHash,
 		&user.Role,
 		&user.Banned,
 		&user.ThreadCount,
 		&user.MessageCount,
 		&user.LastConnection,
 		&user.CreatedAt,
-		&user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -103,7 +106,7 @@ func GetUserByEmail(db *sql.DB, email string) (*User, error) {
 // GetUserByUsername récupère un utilisateur par son nom d'utilisateur
 func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 	query := `
-		SELECT id, username, email, password_hash, role, is_banned, thread_count, message_count, last_connection, created_at, updated_at
+		SELECT id, username, email, password_hash, role, is_banned, thread_count, message_count, last_connection, created_at
 		FROM users
 		WHERE username = ?
 	`
@@ -112,14 +115,13 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 		&user.ID,
 		&user.Username,
 		&user.Email,
-		&user.Password,
+		&user.PasswordHash,
 		&user.Role,
 		&user.Banned,
 		&user.ThreadCount,
 		&user.MessageCount,
 		&user.LastConnection,
 		&user.CreatedAt,
-		&user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -131,10 +133,10 @@ func GetUserByUsername(db *sql.DB, username string) (*User, error) {
 func (u *User) UpdateUser(db *sql.DB) error {
 	query := `
 		UPDATE users
-		SET username = ?, email = ?, password = ?, role = ?, is_banned = ?, updated_at = CURRENT_TIMESTAMP
+		SET username = ?, email = ?, password_hash = ?, role = ?, is_banned = ?
 		WHERE id = ?
 	`
-	_, err := db.Exec(query, u.Username, u.Email, u.Password, u.Role, u.Banned, u.ID)
+	_, err := db.Exec(query, u.Username, u.Email, u.PasswordHash, u.Role, u.Banned, u.ID)
 	return err
 }
 
@@ -144,48 +146,60 @@ func DeleteUser(db *sql.DB, id int64) error {
 	return err
 }
 
-// ListUsers récupère la liste des utilisateurs
-func ListUsers(db *sql.DB, page, perPage int) ([]*User, error) {
-	offset := (page - 1) * perPage
+// ListUsers récupère une liste d'utilisateurs
+func ListUsers(db *sql.DB, page, limit int) ([]map[string]interface{}, error) {
+	offset := (page - 1) * limit
 	query := `
-		SELECT id, username, email, role, banned, thread_count, message_count, last_connection, created_at, updated_at
+		SELECT id, username, email, role, thread_count, message_count, last_connection
 		FROM users
-		ORDER BY created_at DESC
+		ORDER BY message_count DESC
 		LIMIT ? OFFSET ?
 	`
-	rows, err := db.Query(query, perPage, offset)
+	rows, err := db.Query(query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var users []*User
+	var users []map[string]interface{}
 	for rows.Next() {
-		user := &User{}
-		err := rows.Scan(
-			&user.ID,
-			&user.Username,
-			&user.Email,
-			&user.Role,
-			&user.Banned,
-			&user.ThreadCount,
-			&user.MessageCount,
-			&user.LastConnection,
-			&user.CreatedAt,
-			&user.UpdatedAt,
-		)
-		if err != nil {
+		var user struct {
+			ID             int64  `json:"id"`
+			Username       string `json:"username"`
+			Email          string `json:"email"`
+			Role           string `json:"role"`
+			ThreadCount    int    `json:"thread_count"`
+			MessageCount   int    `json:"message_count"`
+			LastConnection string `json:"last_connection"`
+		}
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.Role, &user.ThreadCount, &user.MessageCount, &user.LastConnection); err != nil {
 			return nil, err
 		}
-		users = append(users, user)
+		users = append(users, map[string]interface{}{
+			"id":              user.ID,
+			"username":        user.Username,
+			"email":           user.Email,
+			"role":            user.Role,
+			"thread_count":    user.ThreadCount,
+			"message_count":   user.MessageCount,
+			"last_connection": user.LastConnection,
+		})
 	}
 	return users, nil
 }
 
 // CheckPassword vérifie si le mot de passe est correct
 func (u *User) CheckPassword(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
-	return err == nil
+	// D'abord essayer avec bcrypt
+	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
+	if err == nil {
+		return true
+	}
+
+	// Si bcrypt échoue, essayer avec SHA512
+	hashedPassword := sha512.Sum512([]byte(password))
+	hashedPasswordStr := hex.EncodeToString(hashedPassword[:])
+	return hashedPasswordStr == u.PasswordHash
 }
 
 // SetPassword définit un nouveau mot de passe
@@ -194,7 +208,7 @@ func (u *User) SetPassword(password string) error {
 	if err != nil {
 		return err
 	}
-	u.Password = string(hashedPassword)
+	u.PasswordHash = string(hashedPassword)
 	return nil
 }
 
@@ -224,7 +238,7 @@ func UnbanUser(db *sql.DB, userID int64) error {
 
 // ValidatePassword vérifie si le mot de passe est correct
 func (u *User) ValidatePassword(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
+	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
 	return err == nil
 }
 
@@ -270,4 +284,125 @@ func GetUserStats(db *sql.DB, userID int64) (map[string]int, error) {
 	stats["likes"] = count
 
 	return stats, nil
+}
+
+// Update met à jour les informations de l'utilisateur
+func (u *User) Update(db *sql.DB) error {
+	query := `
+		UPDATE users 
+		SET username = ?, email = ?
+		WHERE id = ?
+	`
+	_, err := db.Exec(query, u.Username, u.Email, u.ID)
+	return err
+}
+
+// GetUserMessages récupère tous les messages d'un utilisateur
+func GetUserMessages(db *sql.DB, userID int64) ([]map[string]interface{}, error) {
+	query := `
+		SELECT m.id, m.content, m.created_at, t.title as thread_title
+		FROM messages m
+		JOIN threads t ON m.thread_id = t.id
+		WHERE m.user_id = ?
+		ORDER BY m.created_at DESC
+	`
+	rows, err := db.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []map[string]interface{}
+	for rows.Next() {
+		var msg struct {
+			ID          int64  `json:"id"`
+			Content     string `json:"content"`
+			CreatedAt   string `json:"created_at"`
+			ThreadTitle string `json:"thread_title"`
+		}
+		if err := rows.Scan(&msg.ID, &msg.Content, &msg.CreatedAt, &msg.ThreadTitle); err != nil {
+			return nil, err
+		}
+		messages = append(messages, map[string]interface{}{
+			"id":           msg.ID,
+			"content":      msg.Content,
+			"created_at":   msg.CreatedAt,
+			"thread_title": msg.ThreadTitle,
+		})
+	}
+	return messages, nil
+}
+
+// GetUserThreads récupère tous les fils de discussion d'un utilisateur
+func GetUserThreads(db *sql.DB, userID int64) ([]map[string]interface{}, error) {
+	query := `
+		SELECT id, title, description, status, created_at
+		FROM threads
+		WHERE user_id = ?
+		ORDER BY created_at DESC
+	`
+	rows, err := db.Query(query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var threads []map[string]interface{}
+	for rows.Next() {
+		var thread struct {
+			ID          int64  `json:"id"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Status      string `json:"status"`
+			CreatedAt   string `json:"created_at"`
+		}
+		if err := rows.Scan(&thread.ID, &thread.Title, &thread.Description, &thread.Status, &thread.CreatedAt); err != nil {
+			return nil, err
+		}
+		threads = append(threads, map[string]interface{}{
+			"id":          thread.ID,
+			"title":       thread.Title,
+			"description": thread.Description,
+			"status":      thread.Status,
+			"created_at":  thread.CreatedAt,
+		})
+	}
+	return threads, nil
+}
+
+// AuthenticateUser vérifie les identifiants d'un utilisateur
+func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
+	var user User
+	query := `
+		SELECT id, username, email, password_hash, role, is_banned, created_at, last_connection,
+			   profile_picture, biography, message_count, thread_count
+		FROM users
+		WHERE (username = ? OR email = ?) AND is_banned = false
+	`
+	err := db.QueryRow(query, username, username).Scan(
+		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+		&user.Role, &user.Banned, &user.CreatedAt, &user.LastConnection,
+		&user.ProfilePicture, &user.Biography, &user.MessageCount, &user.ThreadCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Vérifier le mot de passe
+	if !user.CheckPassword(password) {
+		return nil, fmt.Errorf("invalid password")
+	}
+
+	return &user, nil
+}
+
+// UpdateLastConnection met à jour la dernière connexion d'un utilisateur
+func UpdateLastConnection(db *sql.DB, userID int64) error {
+	query := `
+		UPDATE users
+		SET last_connection = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`
+	_, err := db.Exec(query, userID)
+	return err
 }

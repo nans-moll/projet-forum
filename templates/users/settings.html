@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres du profil - CinéForum</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                🎬 CinéForum
+            </div>
+            <ul class="nav-links">
+                <li><a href="/">Accueil</a></li>
+                <li><a href="/threads">Discussions</a></li>
+                <li><a href="/search">Recherche</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <a href="/login" class="btn btn-secondary">Connexion</a>
+                <a href="/register" class="btn btn-primary">Inscription</a>
+            </div>
+            <div class="user-menu" id="userMenu" style="display: none;">
+                <span id="username"></span>
+                <a href="/profile" class="btn btn-secondary">Profil</a>
+                <a href="#" class="btn btn-primary" onclick="showCreateThread()">Nouvelle discussion</a>
+                <a href="#" onclick="logout()">Déconnexion</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="settings-container">
+            <h1>Paramètres du profil</h1>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+            <div id="success-message" class="success-message" style="display: none;"></div>
+
+            <form id="profileForm">
+                <div class="form-section">
+                    <h2>Informations personnelles</h2>
+                    <div class="form-group">
+                        <label for="username">Nom d'utilisateur :</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Adresse email :</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="bio">Biographie :</label>
+                        <textarea id="bio" name="bio" rows="4"></textarea>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Avatar</h2>
+                    <div class="avatar-upload">
+                        <img id="avatarPreview" src="/static/images/default-avatar.png" alt="Avatar">
+                        <div class="upload-actions">
+                            <input type="file" id="avatarInput" accept="image/*" style="display: none;">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('avatarInput').click()">
+                                Choisir une image
+                            </button>
+                            <button type="button" class="btn btn-danger" onclick="removeAvatar()">
+                                Supprimer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Changer le mot de passe</h2>
+                    <div class="form-group">
+                        <label for="currentPassword">Mot de passe actuel :</label>
+                        <input type="password" id="currentPassword" name="currentPassword">
+                    </div>
+                    <div class="form-group">
+                        <label for="newPassword">Nouveau mot de passe :</label>
+                        <input type="password" id="newPassword" name="newPassword">
+                        <small>Le mot de passe doit contenir au moins 12 caractères, une majuscule et un caractère spécial.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirmer le nouveau mot de passe :</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Préférences</h2>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="emailNotifications" name="emailNotifications">
+                            Recevoir les notifications par email
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="newsletter" name="newsletter">
+                            S'abonner à la newsletter
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                    <a href="/profile" class="btn btn-secondary">Annuler</a>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- Scripts -->
+    <script src="/static/css/js/api.js"></script>
+    <script src="/static/css/js/auth.js"></script>
+    <script>
+        // Vérification de l'état de l'authentification au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+            loadProfile();
+        });
+
+        // Fonction pour charger le profil
+        async function loadProfile() {
+            try {
+                const response = await api.users.getProfile();
+                const profile = response.data;
+
+                // Remplir le formulaire
+                document.getElementById('username').value = profile.username;
+                document.getElementById('email').value = profile.email;
+                document.getElementById('bio').value = profile.bio || '';
+                document.getElementById('emailNotifications').checked = profile.email_notifications;
+                document.getElementById('newsletter').checked = profile.newsletter;
+
+                // Afficher l'avatar
+                if (profile.avatar) {
+                    document.getElementById('avatarPreview').src = profile.avatar;
+                }
+            } catch (error) {
+                console.error('Erreur lors du chargement du profil:', error);
+                showError('Erreur lors du chargement du profil');
+            }
+        }
+
+        // Gestion de l'upload d'avatar
+        document.getElementById('avatarInput').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('avatarPreview').src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Fonction pour supprimer l'avatar
+        function removeAvatar() {
+            document.getElementById('avatarPreview').src = '/static/images/default-avatar.png';
+            document.getElementById('avatarInput').value = '';
+        }
+
+        // Validation du mot de passe
+        function validatePassword(password) {
+            const minLength = 12;
+            const hasUpperCase = /[A-Z]/.test(password);
+            const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+            if (password.length < minLength) {
+                throw new Error('Le mot de passe doit contenir au moins 12 caractères.');
+            }
+            if (!hasUpperCase) {
+                throw new Error('Le mot de passe doit contenir au moins une majuscule.');
+            }
+            if (!hasSpecialChar) {
+                throw new Error('Le mot de passe doit contenir au moins un caractère spécial.');
+            }
+        }
+
+        // Gestion du formulaire
+        document.getElementById('profileForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('username', document.getElementById('username').value);
+            formData.append('email', document.getElementById('email').value);
+            formData.append('bio', document.getElementById('bio').value);
+            formData.append('email_notifications', document.getElementById('emailNotifications').checked);
+            formData.append('newsletter', document.getElementById('newsletter').checked);
+
+            const avatarFile = document.getElementById('avatarInput').files[0];
+            if (avatarFile) {
+                formData.append('avatar', avatarFile);
+            }
+
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (newPassword) {
+                try {
+                    validatePassword(newPassword);
+                    if (newPassword !== confirmPassword) {
+                        throw new Error('Les mots de passe ne correspondent pas.');
+                    }
+                    formData.append('current_password', currentPassword);
+                    formData.append('new_password', newPassword);
+                } catch (error) {
+                    showError(error.message);
+                    return;
+                }
+            }
+
+            try {
+                await api.users.updateProfile(formData);
+                showSuccess('Profil mis à jour avec succès');
+                setTimeout(() => {
+                    window.location.href = '/profile';
+                }, 2000);
+            } catch (error) {
+                console.error('Erreur lors de la mise à jour du profil:', error);
+                showError(error.message || 'Une erreur est survenue lors de la mise à jour du profil');
+            }
+        });
+
+        // Fonction pour afficher une erreur
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('success-message').style.display = 'none';
+        }
+
+        // Fonction pour afficher un message de succès
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('error-message').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

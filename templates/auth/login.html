@@ -20,8 +20,8 @@
 
             <form class="auth-form" id="loginForm">
                 <div class="form-group has-icon" data-icon="👤">
-                    <label for="identifier">Identifiant</label>
-                    <input type="text" id="identifier" name="identifier" required 
+                    <label for="username">Identifiant</label>
+                    <input type="text" id="username" name="username" required 
                            placeholder="Email ou nom d'utilisateur">
                 </div>
 
@@ -57,6 +57,8 @@
         </div>
     </div>
 
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/auth.js"></script>
     <script>
         function togglePassword(fieldId) {
             const passwordInput = document.getElementById(fieldId);
@@ -100,50 +102,6 @@
             }
         }
 
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(e.target);
-            const loginData = {
-                identifier: formData.get('identifier'),
-                password: formData.get('password')
-            };
-            
-            showLoading(true);
-            
-            try {
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(loginData)
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok && data.status === 'success') {
-                    // Stocker le token JWT
-                    localStorage.setItem('jwt_token', data.data.token);
-                    
-                    showMessage('Connexion réussie ! Redirection...', 'success');
-                    
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 1500);
-                    
-                } else {
-                    showMessage(data.message || 'Identifiants incorrects', 'error');
-                }
-                
-            } catch (error) {
-                console.error('Erreur de connexion:', error);
-                showMessage('Erreur de connexion. Veuillez réessayer.', 'error');
-            } finally {
-                showLoading(false);
-            }
-        });
-
         // Animation d'entrée
         document.addEventListener('DOMContentLoaded', function() {
             const card = document.querySelector('.auth-card');
@@ -170,6 +128,38 @@
             const message = urlParams.get('message');
             if (message === 'account_created') {
                 showMessage('Compte créé avec succès ! Vous pouvez maintenant vous connecter.', 'success');
+            }
+
+            // Gestion du formulaire de connexion
+            const loginForm = document.getElementById('loginForm');
+            if (loginForm) {
+                loginForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const username = document.getElementById('username').value;
+                    const password = document.getElementById('password').value;
+                    
+                    try {
+                        showLoading(true);
+                        const response = await apiCall('/api/login', 'POST', {
+                            username,
+                            password
+                        });
+
+                        if (response.status === 'success') {
+                            localStorage.setItem('jwt_token', response.data.token);
+                            showMessage('Connexion réussie ! Redirection...', 'success');
+                            setTimeout(() => {
+                                window.location.href = '/';
+                            }, 1500);
+                        } else {
+                            showMessage(response.message || 'Erreur lors de la connexion');
+                        }
+                    } catch (error) {
+                        showMessage(error.message || 'Erreur lors de la connexion');
+                    } finally {
+                        showLoading(false);
+                    }
+                });
             }
         });
     </script>

@@ -3,6 +3,7 @@ package controllers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -93,7 +94,7 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	result, err := c.DB.Exec(query,
 		user.Username,
 		user.Email,
-		user.Password,
+		user.PasswordHash,
 		user.Role,
 		user.Banned,
 	)
@@ -141,7 +142,7 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Login gère la connexion des utilisateurs
+// Login gère la connexion d'un utilisateur
 func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
@@ -152,8 +153,8 @@ func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Identifier string `json:"identifier"` // email ou username
-		Password   string `json:"password"`
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -164,16 +165,8 @@ func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Essayer de trouver l'utilisateur par email ou username
-	var user *models.User
-	var err error
-
-	if strings.Contains(input.Identifier, "@") {
-		user, err = models.GetUserByEmail(c.DB, input.Identifier)
-	} else {
-		user, err = models.GetUserByUsername(c.DB, input.Identifier)
-	}
-
+	// Vérifier les identifiants
+	user, err := models.AuthenticateUser(c.DB, input.Username, input.Password)
 	if err != nil {
 		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
 			Status:  "error",
@@ -182,35 +175,8 @@ func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Vérifier si l'utilisateur est banni
-	if user.Banned {
-		middleware.SendJSON(w, http.StatusForbidden, middleware.Response{
-			Status:  "error",
-			Message: "Account is banned",
-		})
-		return
-	}
-
-	// Vérifier le mot de passe
-	if !user.CheckPassword(input.Password) {
-		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
-			Status:  "error",
-			Message: "Invalid credentials",
-		})
-		return
-	}
-
-	// Mettre à jour la dernière connexion
-	if err := user.UpdateLastConnection(c.DB); err != nil {
-		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
-			Status:  "error",
-			Message: "Error updating last connection",
-		})
-		return
-	}
-
 	// Générer le token JWT
-	token, err := middleware.GenerateToken(user)
+	token, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
 			Status:  "error",
@@ -219,10 +185,158 @@ func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Créer le cookie de session
+	sessionCookie := &http.Cookie{
+		Name:     "session",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   86400, // 24 heures
+	}
+	http.SetCookie(w, sessionCookie)
+
+	// Mettre à jour la dernière connexion
+	if err := models.UpdateLastConnection(c.DB, user.ID); err != nil {
+		fmt.Printf("[DEBUG] Login - Erreur lors de la mise à jour de la dernière connexion: %v\n", err)
+	}
+
 	middleware.SendJSON(w, http.StatusOK, middleware.Response{
 		Status: "success",
-		Data: map[string]string{
+		Data: map[string]interface{}{
 			"token": token,
+			"user": map[string]interface{}{
+				"id":       user.ID,
+				"username": user.Username,
+				"email":    user.Email,
+				"role":     user.Role,
+			},
 		},
+	})
+}
+
+// ShowLoginForm affiche le formulaire de connexion
+func (c *AuthController) ShowLoginForm(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/auth/login.html")
+}
+
+// ShowRegisterForm affiche le formulaire d'inscription
+func (c *AuthController) ShowRegisterForm(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/auth/register.html")
+}
+
+// ShowProfile affiche le profil de l'utilisateur
+func (c *AuthController) ShowProfile(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/auth/profile.html")
+}
+
+// ShowSettings affiche les paramètres de l'utilisateur
+func (c *AuthController) ShowSettings(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "templates/auth/settings.html")
+}
+
+// GetUserProfile récupère le profil de l'utilisateur
+func (c *AuthController) GetUserProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(int64)
+	user, err := models.GetUserByID(c.DB, userID)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user profile",
+		})
+		return
+	}
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   user,
+	})
+}
+
+// UpdateUserProfile met à jour le profil de l'utilisateur
+func (c *AuthController) UpdateUserProfile(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(int64)
+	var input struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid request body",
+		})
+		return
+	}
+	user, err := models.GetUserByID(c.DB, userID)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user",
+		})
+		return
+	}
+	user.Username = input.Username
+	user.Email = input.Email
+	if err := user.Update(c.DB); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error updating user",
+		})
+		return
+	}
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   user,
+	})
+}
+
+// GetUserStats récupère les statistiques de l'utilisateur
+func (c *AuthController) GetUserStats(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(int64)
+	stats, err := models.GetUserStats(c.DB, userID)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user stats",
+		})
+		return
+	}
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   stats,
+	})
+}
+
+// GetUserThreads récupère les fils de discussion de l'utilisateur
+func (c *AuthController) GetUserThreads(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(int64)
+	threads, err := models.GetUserThreads(c.DB, userID)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user threads",
+		})
+		return
+	}
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   threads,
+	})
+}
+
+// GetUserMessages récupère les messages de l'utilisateur
+func (c *AuthController) GetUserMessages(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(int64)
+	messages, err := models.GetUserMessages(c.DB, userID)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error getting user messages",
+		})
+		return
+	}
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   messages,
 	})
 }

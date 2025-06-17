@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil - CinéForum</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                🎬 CinéForum
+            </div>
+            <ul class="nav-links">
+                <li><a href="/">Accueil</a></li>
+                <li><a href="/threads">Discussions</a></li>
+                <li><a href="/search">Recherche</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <a href="/login" class="btn btn-secondary">Connexion</a>
+                <a href="/register" class="btn btn-primary">Inscription</a>
+            </div>
+            <div class="user-menu" id="userMenu" style="display: none;">
+                <span id="username"></span>
+                <a href="/profile" class="btn btn-secondary">Profil</a>
+                <a href="#" class="btn btn-primary" onclick="showCreateThread()">Nouvelle discussion</a>
+                <a href="#" onclick="logout()">Déconnexion</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="profile-container">
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    <img id="profilePicture" src="/static/images/default-avatar.png" alt="Avatar">
+                    <div class="profile-actions" id="profileActions" style="display: none;">
+                        <button class="btn btn-secondary" onclick="editProfile()">Modifier le profil</button>
+                    </div>
+                </div>
+                <div class="profile-info">
+                    <h1 id="username"></h1>
+                    <p id="biography" class="profile-bio"></p>
+                    <div class="profile-stats">
+                        <div class="stat">
+                            <span class="stat-value" id="threadCount">0</span>
+                            <span class="stat-label">Discussions</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="messageCount">0</span>
+                            <span class="stat-label">Messages</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="lastConnection">-</span>
+                            <span class="stat-label">Dernière connexion</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-content">
+                <div class="profile-tabs">
+                    <button class="tab-btn active" onclick="showTab('threads')">Discussions</button>
+                    <button class="tab-btn" onclick="showTab('messages')">Messages</button>
+                </div>
+
+                <div class="tab-content" id="threadsTab">
+                    <div class="threads-list" id="userThreads">
+                        <!-- Les discussions seront chargées ici dynamiquement -->
+                    </div>
+                </div>
+
+                <div class="tab-content" id="messagesTab" style="display: none;">
+                    <div class="messages-list" id="userMessages">
+                        <!-- Les messages seront chargés ici dynamiquement -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulaire de mise à jour du profil -->
+        <form id="updateProfileForm" style="display: none;">
+            <div class="form-group">
+                <label for="biography">Biographie</label>
+                <textarea id="biography" name="biography" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="profile_picture">Photo de profil</label>
+                <input type="file" id="profile_picture" name="profile_picture" accept="image/*">
+            </div>
+            <button type="submit" class="btn btn-primary">Mettre à jour</button>
+        </form>
+    </main>
+
+    <!-- Message d'erreur/succès -->
+    <div id="message" class="message" style="display: none;"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/profile.js"></script>
+</body>
+</html>

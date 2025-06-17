@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de bord administrateur - CinéForum</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <div class="logo">
+                🎬 CinéForum
+            </div>
+            <ul class="nav-links">
+                <li><a href="/">Accueil</a></li>
+                <li><a href="/threads">Discussions</a></li>
+                <li><a href="/search">Recherche</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <a href="/login" class="btn btn-secondary">Connexion</a>
+                <a href="/register" class="btn btn-primary">Inscription</a>
+            </div>
+            <div class="user-menu" id="userMenu" style="display: none;">
+                <span id="username"></span>
+                <a href="/profile" class="btn btn-secondary">Profil</a>
+                <a href="#" class="btn btn-primary" onclick="showCreateThread()">Nouvelle discussion</a>
+                <a href="#" onclick="logout()">Déconnexion</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div class="admin-dashboard">
+            <h1>Tableau de bord administrateur</h1>
+            <div id="error-message" class="error-message" style="display: none;"></div>
+            <div id="success-message" class="success-message" style="display: none;"></div>
+
+            <div class="dashboard-grid">
+                <!-- Statistiques -->
+                <div class="dashboard-section">
+                    <h2>Statistiques</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Utilisateurs</h3>
+                            <div class="stat-value" id="userCount">0</div>
+                            <div class="stat-change" id="userChange">+0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Discussions</h3>
+                            <div class="stat-value" id="threadCount">0</div>
+                            <div class="stat-change" id="threadChange">+0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Messages</h3>
+                            <div class="stat-value" id="messageCount">0</div>
+                            <div class="stat-change" id="messageChange">+0%</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Likes</h3>
+                            <div class="stat-value" id="likeCount">0</div>
+                            <div class="stat-change" id="likeChange">+0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dernières actions -->
+                <div class="dashboard-section">
+                    <h2>Dernières actions</h2>
+                    <div class="action-list" id="recentActions">
+                        <!-- Les actions seront chargées ici dynamiquement -->
+                    </div>
+                </div>
+
+                <!-- Utilisateurs récents -->
+                <div class="dashboard-section">
+                    <h2>Utilisateurs récents</h2>
+                    <div class="user-list" id="recentUsers">
+                        <!-- Les utilisateurs seront chargés ici dynamiquement -->
+                    </div>
+                </div>
+
+                <!-- Discussions récentes -->
+                <div class="dashboard-section">
+                    <h2>Discussions récentes</h2>
+                    <div class="thread-list" id="recentThreads">
+                        <!-- Les discussions seront chargées ici dynamiquement -->
+                    </div>
+                </div>
+
+                <!-- Modération -->
+                <div class="dashboard-section">
+                    <h2>Modération</h2>
+                    <div class="moderation-actions">
+                        <button class="btn btn-primary" onclick="showReportedContent()">
+                            Contenu signalé
+                            <span class="badge" id="reportedCount">0</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="showUserManagement()">
+                            Gestion des utilisateurs
+                        </button>
+                        <button class="btn btn-secondary" onclick="showContentManagement()">
+                            Gestion du contenu
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Configuration -->
+                <div class="dashboard-section">
+                    <h2>Configuration</h2>
+                    <div class="config-actions">
+                        <button class="btn btn-secondary" onclick="showSiteSettings()">
+                            Paramètres du site
+                        </button>
+                        <button class="btn btn-secondary" onclick="showEmailSettings()">
+                            Configuration des emails
+                        </button>
+                        <button class="btn btn-secondary" onclick="showBackupSettings()">
+                            Sauvegarde et restauration
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div id="reportedContentModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Contenu signalé</h2>
+            <div class="reported-list" id="reportedList">
+                <!-- Le contenu signalé sera chargé ici dynamiquement -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/css/js/api.js"></script>
+    <script src="/static/css/js/auth.js"></script>
+    <script>
+        // Vérification de l'état de l'authentification au chargement
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+            loadDashboard();
+        });
+
+        // Fonction pour charger le tableau de bord
+        async function loadDashboard() {
+            try {
+                const response = await api.admin.getDashboard();
+                const data = response.data;
+
+                // Mettre à jour les statistiques
+                updateStats(data.stats);
+
+                // Charger les actions récentes
+                loadRecentActions(data.recent_actions);
+
+                // Charger les utilisateurs récents
+                loadRecentUsers(data.recent_users);
+
+                // Charger les discussions récentes
+                loadRecentThreads(data.recent_threads);
+
+                // Mettre à jour le compteur de contenu signalé
+                document.getElementById('reportedCount').textContent = data.reported_count;
+            } catch (error) {
+                console.error('Erreur lors du chargement du tableau de bord:', error);
+                showError('Erreur lors du chargement du tableau de bord');
+            }
+        }
+
+        // Fonction pour mettre à jour les statistiques
+        function updateStats(stats) {
+            document.getElementById('userCount').textContent = stats.user_count;
+            document.getElementById('userChange').textContent = `${stats.user_change > 0 ? '+' : ''}${stats.user_change}%`;
+            document.getElementById('threadCount').textContent = stats.thread_count;
+            document.getElementById('threadChange').textContent = `${stats.thread_change > 0 ? '+' : ''}${stats.thread_change}%`;
+            document.getElementById('messageCount').textContent = stats.message_count;
+            document.getElementById('messageChange').textContent = `${stats.message_change > 0 ? '+' : ''}${stats.message_change}%`;
+            document.getElementById('likeCount').textContent = stats.like_count;
+            document.getElementById('likeChange').textContent = `${stats.like_change > 0 ? '+' : ''}${stats.like_change}%`;
+        }
+
+        // Fonction pour charger les actions récentes
+        function loadRecentActions(actions) {
+            const container = document.getElementById('recentActions');
+            container.innerHTML = '';
+
+            actions.forEach(action => {
+                const div = document.createElement('div');
+                div.className = 'action-item';
+                div.innerHTML = `
+                    <div class="action-icon">${getActionIcon(action.type)}</div>
+                    <div class="action-content">
+                        <div class="action-text">${action.description}</div>
+                        <div class="action-meta">
+                            <span>${action.user}</span>
+                            <span>${new Date(action.timestamp).toLocaleString()}</span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Fonction pour charger les utilisateurs récents
+        function loadRecentUsers(users) {
+            const container = document.getElementById('recentUsers');
+            container.innerHTML = '';
+
+            users.forEach(user => {
+                const div = document.createElement('div');
+                div.className = 'user-item';
+                div.innerHTML = `
+                    <img src="${user.avatar || '/static/images/default-avatar.png'}" alt="Avatar" class="user-avatar">
+                    <div class="user-info">
+                        <div class="user-name">${user.username}</div>
+                        <div class="user-meta">
+                            <span>Inscrit le ${new Date(user.created_at).toLocaleDateString()}</span>
+                            <span>${user.thread_count} discussions</span>
+                        </div>
+                    </div>
+                    <div class="user-actions">
+                        <button class="btn btn-secondary" onclick="viewUser(${user.id})">Voir</button>
+                        <button class="btn btn-danger" onclick="banUser(${user.id})">Bannir</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Fonction pour charger les discussions récentes
+        function loadRecentThreads(threads) {
+            const container = document.getElementById('recentThreads');
+            container.innerHTML = '';
+
+            threads.forEach(thread => {
+                const div = document.createElement('div');
+                div.className = 'thread-item';
+                div.innerHTML = `
+                    <div class="thread-info">
+                        <div class="thread-title">${thread.title}</div>
+                        <div class="thread-meta">
+                            <span>Par ${thread.author}</span>
+                            <span>${thread.message_count} messages</span>
+                            <span>${new Date(thread.created_at).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                    <div class="thread-actions">
+                        <button class="btn btn-secondary" onclick="viewThread(${thread.id})">Voir</button>
+                        <button class="btn btn-danger" onclick="deleteThread(${thread.id})">Supprimer</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // Fonction pour obtenir l'icône d'une action
+        function getActionIcon(type) {
+            const icons = {
+                'user_register': '👤',
+                'thread_create': '📝',
+                'message_create': '💬',
+                'like': '❤️',
+                'report': '⚠️',
+                'delete': '🗑️',
+                'ban': '🚫'
+            };
+            return icons[type] || '📌';
+        }
+
+        // Fonction pour afficher le contenu signalé
+        async function showReportedContent() {
+            try {
+                const response = await api.admin.getReportedContent();
+                const container = document.getElementById('reportedList');
+                container.innerHTML = '';
+
+                response.data.forEach(report => {
+                    const div = document.createElement('div');
+                    div.className = 'reported-item';
+                    div.innerHTML = `
+                        <div class="reported-content">
+                            <div class="reported-type">${report.type}</div>
+                            <div class="reported-text">${report.content}</div>
+                            <div class="reported-meta">
+                                <span>Signalé par ${report.reporter}</span>
+                                <span>${new Date(report.reported_at).toLocaleString()}</span>
+                            </div>
+                        </div>
+                        <div class="reported-actions">
+                            <button class="btn btn-secondary" onclick="viewContent(${report.id})">Voir</button>
+                            <button class="btn btn-danger" onclick="deleteContent(${report.id})">Supprimer</button>
+                            <button class="btn btn-primary" onclick="dismissReport(${report.id})">Ignorer</button>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+
+                document.getElementById('reportedContentModal').style.display = 'block';
+            } catch (error) {
+                console.error('Erreur lors du chargement du contenu signalé:', error);
+                showError('Erreur lors du chargement du contenu signalé');
+            }
+        }
+
+        // Fonction pour afficher une erreur
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('success-message').style.display = 'none';
+        }
+
+        // Fonction pour afficher un message de succès
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-message');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('error-message').style.display = 'none';
+        }
+
+        // Fonctions de gestion des utilisateurs
+        async function viewUser(userId) {
+            window.location.href = `/users/${userId}`;
+        }
+
+        async function banUser(userId) {
+            if (confirm('Êtes-vous sûr de vouloir bannir cet utilisateur ?')) {
+                try {
+                    await api.admin.banUser(userId);
+                    showSuccess('Utilisateur banni avec succès');
+                    loadDashboard();
+                } catch (error) {
+                    console.error('Erreur lors du bannissement:', error);
+                    showError('Erreur lors du bannissement de l\'utilisateur');
+                }
+            }
+        }
+
+        // Fonctions de gestion des discussions
+        async function viewThread(threadId) {
+            window.location.href = `/threads/${threadId}`;
+        }
+
+        async function deleteThread(threadId) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette discussion ?')) {
+                try {
+                    await api.admin.deleteThread(threadId);
+                    showSuccess('Discussion supprimée avec succès');
+                    loadDashboard();
+                } catch (error) {
+                    console.error('Erreur lors de la suppression:', error);
+                    showError('Erreur lors de la suppression de la discussion');
+                }
+            }
+        }
+
+        // Fonctions de gestion du contenu signalé
+        async function viewContent(contentId) {
+            // Implémenter la logique pour voir le contenu
+        }
+
+        async function deleteContent(contentId) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer ce contenu ?')) {
+                try {
+                    await api.admin.deleteContent(contentId);
+                    showSuccess('Contenu supprimé avec succès');
+                    showReportedContent();
+                } catch (error) {
+                    console.error('Erreur lors de la suppression:', error);
+                    showError('Erreur lors de la suppression du contenu');
+                }
+            }
+        }
+
+        async function dismissReport(reportId) {
+            try {
+                await api.admin.dismissReport(reportId);
+                showSuccess('Signalement ignoré avec succès');
+                showReportedContent();
+            } catch (error) {
+                console.error('Erreur lors de l\'ignorance du signalement:', error);
+                showError('Erreur lors de l\'ignorance du signalement');
+            }
+        }
+
+        // Fonctions de configuration
+        function showSiteSettings() {
+            // Implémenter la logique pour afficher les paramètres du site
+        }
+
+        function showEmailSettings() {
+            // Implémenter la logique pour afficher la configuration des emails
+        }
+
+        function showBackupSettings() {
+            // Implémenter la logique pour afficher les paramètres de sauvegarde
+        }
+
+        function showUserManagement() {
+            // Implémenter la logique pour afficher la gestion des utilisateurs
+        }
+
+        function showContentManagement() {
+            // Implémenter la logique pour afficher la gestion du contenu
+        }
+    </script>
+</body>
+</html>

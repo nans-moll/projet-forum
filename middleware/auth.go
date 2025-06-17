@@ -3,11 +3,10 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
-
-	"projet-forum/models"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -22,15 +21,14 @@ type Claims struct {
 }
 
 // GenerateToken génère un token JWT pour un utilisateur
-func GenerateToken(user *models.User) (string, error) {
+func GenerateToken(userID int64, username, role string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
-		UserID:   user.ID,
-		Username: user.Username,
-		Role:     user.Role,
+		UserID:   userID,
+		Username: username,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
@@ -54,8 +52,27 @@ func SendJSON(w http.ResponseWriter, status int, data interface{}) {
 // AuthMiddleware vérifie le token JWT
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Printf("[DEBUG] AuthMiddleware - URL: %s\n", r.URL.Path)
+		fmt.Printf("[DEBUG] AuthMiddleware - Headers: %v\n", r.Header)
+
+		// Vérifier d'abord le cookie de session
+		cookie, err := r.Cookie("session")
+		if err == nil {
+			fmt.Printf("[DEBUG] AuthMiddleware - Cookie de session trouvé: %s\n", cookie.Value)
+			// Si c'est une requête HTML, on autorise l'accès
+			if strings.Contains(r.Header.Get("Accept"), "text/html") {
+				fmt.Printf("[DEBUG] AuthMiddleware - Requête HTML autorisée\n")
+				next.ServeHTTP(w, r)
+				return
+			}
+		} else {
+			fmt.Printf("[DEBUG] AuthMiddleware - Pas de cookie de session: %v\n", err)
+		}
+
+		// Sinon, vérifier le token JWT
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
+			fmt.Printf("[DEBUG] AuthMiddleware - Pas de header Authorization\n")
 			SendJSON(w, http.StatusUnauthorized, Response{
 				Status:  "error",
 				Message: "Authorization header is required",
@@ -66,6 +83,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		// Extraire le token du header
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
+			fmt.Printf("[DEBUG] AuthMiddleware - Format de header invalide: %v\n", parts)
 			SendJSON(w, http.StatusUnauthorized, Response{
 				Status:  "error",
 				Message: "Invalid authorization header format",
@@ -81,13 +99,25 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return jwtKey, nil
 		})
 
-		if err != nil || !token.Valid {
+		if err != nil {
+			fmt.Printf("[DEBUG] AuthMiddleware - Erreur de parsing du token: %v\n", err)
+			SendJSON(w, http.StatusUnauthorized, Response{
+				Status:  "error",
+				Message: "Invalid token: " + err.Error(),
+			})
+			return
+		}
+
+		if !token.Valid {
+			fmt.Printf("[DEBUG] AuthMiddleware - Token invalide\n")
 			SendJSON(w, http.StatusUnauthorized, Response{
 				Status:  "error",
 				Message: "Invalid token",
 			})
 			return
 		}
+
+		fmt.Printf("[DEBUG] AuthMiddleware - Token valide pour l'utilisateur: %s (ID: %d)\n", claims.Username, claims.UserID)
 
 		// Ajouter les claims au contexte
 		ctx := context.WithValue(r.Context(), "user", claims)

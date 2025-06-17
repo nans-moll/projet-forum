@@ -2,11 +2,20 @@ package routes
 
 import (
 	"net/http"
+
 	"projet-forum/controllers"
+	"projet-forum/middleware"
+
+	"github.com/gorilla/mux"
 )
 
-func SetupAuthRoutes(mux *http.ServeMux, authController *controllers.AuthController) {
+// SetupAuthRoutes configure les routes d'authentification
+func SetupAuthRoutes(router *mux.Router, authController *controllers.AuthController) {
 	// Routes publiques
-	mux.HandleFunc("/api/auth/register", authController.Register)
-	mux.HandleFunc("/api/auth/login", authController.Login)
+	router.HandleFunc("/auth/register", authController.ShowRegisterForm).Methods("GET")
+	router.HandleFunc("/auth/login", authController.ShowLoginForm).Methods("GET")
+
+	// Routes protégées
+	router.Handle("/auth/profile", middleware.AuthMiddleware(http.HandlerFunc(authController.ShowProfile))).Methods("GET")
+	router.Handle("/auth/settings", middleware.AuthMiddleware(http.HandlerFunc(authController.ShowSettings))).Methods("GET")
 }

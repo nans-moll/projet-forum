@@ -2,6 +2,8 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
+	"log"
 	"projet-forum/config"
 	"time"
 )
@@ -32,6 +34,7 @@ type Thread struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	MessageCount int       `json:"message_count"`
+	ViewCount    int       `json:"view_count"`
 	Author       *User     `json:"author,omitempty"`
 }
 
@@ -71,18 +74,25 @@ func CreateThread(db *sql.DB, title, description string, authorID int64, tags []
 
 // GetThread récupère un fil de discussion par son ID
 func GetThread(db *sql.DB, id int64) (*Thread, error) {
+	log.Printf("[DEBUG] GetThread (model) - Début de la fonction pour l'ID: %d", id)
+
 	query := `
 		SELECT t.id, t.title, t.description, t.tags, t.author_id, t.status, t.visibility, t.created_at, t.updated_at,
-		       COUNT(m.id) as message_count,
-		       u.username, u.email, u.role
+			   COUNT(DISTINCT m.id) as message_count,
+			   u.username, u.email, u.role
 		FROM threads t
 		LEFT JOIN messages m ON t.id = m.thread_id
 		LEFT JOIN users u ON t.author_id = u.id
 		WHERE t.id = ?
-		GROUP BY t.id
+		GROUP BY t.id, t.title, t.description, t.tags, t.author_id, t.status, t.visibility, t.created_at, t.updated_at,
+				 u.username, u.email, u.role
 	`
+	log.Printf("[DEBUG] GetThread (model) - Requête SQL: %s", query)
+
 	thread := &Thread{}
 	var author User
+
+	log.Printf("[DEBUG] GetThread (model) - Exécution de la requête")
 	err := db.QueryRow(query, id).Scan(
 		&thread.ID,
 		&thread.Title,
@@ -98,10 +108,25 @@ func GetThread(db *sql.DB, id int64) (*Thread, error) {
 		&author.Email,
 		&author.Role,
 	)
+
 	if err != nil {
+		log.Printf("[DEBUG] GetThread (model) - Erreur lors de la récupération: %v", err)
 		return nil, err
 	}
+
 	thread.Author = &author
+
+	log.Printf("[DEBUG] GetThread (model) - Données récupérées:")
+	log.Printf("[DEBUG] GetThread (model) - Thread ID: %d", thread.ID)
+	log.Printf("[DEBUG] GetThread (model) - Thread Title: %s", thread.Title)
+	log.Printf("[DEBUG] GetThread (model) - Thread Description: %s", thread.Description)
+	log.Printf("[DEBUG] GetThread (model) - Thread Tags: %s", thread.Tags)
+	log.Printf("[DEBUG] GetThread (model) - Thread AuthorID: %d", thread.AuthorID)
+	log.Printf("[DEBUG] GetThread (model) - Thread MessageCount: %d", thread.MessageCount)
+	log.Printf("[DEBUG] GetThread (model) - Author Username: %s", thread.Author.Username)
+	log.Printf("[DEBUG] GetThread (model) - Author Email: %s", thread.Author.Email)
+	log.Printf("[DEBUG] GetThread (model) - Author Role: %s", thread.Author.Role)
+
 	return thread, nil
 }
 
@@ -139,64 +164,85 @@ func DeleteThread(db *sql.DB, id int64) error {
 	return tx.Commit()
 }
 
-// ListThreads récupère la liste des fils de discussion
-func ListThreads(db *sql.DB, page, perPage int, status string, tag string) ([]*Thread, error) {
-	offset := (page - 1) * perPage
-	var args []interface{}
-
-	baseQuery := `
-		SELECT t.id, t.title, t.description, t.tags, t.author_id, t.status, t.visibility, t.created_at, t.updated_at,
-		       COUNT(m.id) as message_count,
-		       u.username, u.email, u.role
+// ListThreads récupère une liste de fils de discussion
+func ListThreads(db *sql.DB, page, limit int, status, visibility string) ([]map[string]interface{}, error) {
+	offset := (page - 1) * limit
+	query := `
+		SELECT t.id, t.title, t.description, t.tags, t.status, t.visibility, t.created_at, t.message_count,
+			   u.id as author_id, u.username as author_username, u.email as author_email, u.role as author_role
 		FROM threads t
-		LEFT JOIN messages m ON t.id = m.thread_id
-		LEFT JOIN users u ON t.author_id = u.id
+		JOIN users u ON t.author_id = u.id
+		WHERE t.status = ? AND t.visibility = ?
+		ORDER BY t.created_at DESC
+		LIMIT ? OFFSET ?
 	`
 
-	whereClause := " WHERE t.status != 'archived'"
-	if status != "" {
-		whereClause += " AND t.status = ?"
-		args = append(args, status)
-	}
-	if tag != "" {
-		whereClause += " AND FIND_IN_SET(?, t.tags)"
-		args = append(args, tag)
-	}
+	fmt.Printf("[DEBUG] ListThreads - Query: %s\n", query)
+	fmt.Printf("[DEBUG] ListThreads - Params: status=%s, visibility=%s, limit=%d, offset=%d\n", status, visibility, limit, offset)
 
-	baseQuery += whereClause + " GROUP BY t.id ORDER BY t.created_at DESC LIMIT ? OFFSET ?"
-	args = append(args, perPage, offset)
-
-	rows, err := db.Query(baseQuery, args...)
+	rows, err := db.Query(query, status, visibility, limit, offset)
 	if err != nil {
+		fmt.Printf("[DEBUG] ListThreads - Query error: %v\n", err)
 		return nil, err
 	}
 	defer rows.Close()
 
-	var threads []*Thread
+	var threads []map[string]interface{}
 	for rows.Next() {
-		thread := &Thread{}
-		var author User
-		err := rows.Scan(
+		var thread struct {
+			ID           int64  `json:"id"`
+			Title        string `json:"title"`
+			Description  string `json:"description"`
+			Tags         string `json:"tags"`
+			Status       string `json:"status"`
+			Visibility   string `json:"visibility"`
+			CreatedAt    string `json:"created_at"`
+			MessageCount int    `json:"message_count"`
+			AuthorID     int64  `json:"author_id"`
+			AuthorName   string `json:"author_username"`
+			AuthorEmail  string `json:"author_email"`
+			AuthorRole   string `json:"author_role"`
+		}
+		if err := rows.Scan(
 			&thread.ID,
 			&thread.Title,
 			&thread.Description,
 			&thread.Tags,
-			&thread.AuthorID,
 			&thread.Status,
 			&thread.Visibility,
 			&thread.CreatedAt,
-			&thread.UpdatedAt,
 			&thread.MessageCount,
-			&author.Username,
-			&author.Email,
-			&author.Role,
-		)
-		if err != nil {
+			&thread.AuthorID,
+			&thread.AuthorName,
+			&thread.AuthorEmail,
+			&thread.AuthorRole,
+		); err != nil {
+			fmt.Printf("[DEBUG] ListThreads - Scan error: %v\n", err)
 			return nil, err
 		}
-		thread.Author = &author
-		threads = append(threads, thread)
+
+		fmt.Printf("[DEBUG] ListThreads - Thread data: ID=%d, Title=%s, Author=%s\n",
+			thread.ID, thread.Title, thread.AuthorName)
+
+		threads = append(threads, map[string]interface{}{
+			"id":            thread.ID,
+			"title":         thread.Title,
+			"description":   thread.Description,
+			"tags":          thread.Tags,
+			"status":        thread.Status,
+			"visibility":    thread.Visibility,
+			"created_at":    thread.CreatedAt,
+			"message_count": thread.MessageCount,
+			"author": map[string]interface{}{
+				"id":       thread.AuthorID,
+				"username": thread.AuthorName,
+				"email":    thread.AuthorEmail,
+				"role":     thread.AuthorRole,
+			},
+		})
 	}
+
+	fmt.Printf("[DEBUG] ListThreads - Found %d threads\n", len(threads))
 	return threads, nil
 }
 
@@ -366,4 +412,15 @@ func GetThreadsByAuthorID(authorID, limit, offset int) ([]*Thread, error) {
 		threads = append(threads, thread)
 	}
 	return threads, nil
+}
+
+// AdminUpdateThread permet à un admin de mettre à jour un fil de discussion
+func AdminUpdateThread(db *sql.DB, threadID int64, status, visibility string) error {
+	query := `
+		UPDATE threads 
+		SET status = ?, visibility = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?
+	`
+	_, err := db.Exec(query, status, visibility, threadID)
+	return err
 }

@@ -1,0 +1,38 @@
+<!-- Formulaire de message -->
+<div class="message-form">
+    <form id="messageForm">
+        <div class="form-group">
+            <textarea id="messageContent" rows="4" required placeholder="Votre message..."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Envoyer</button>
+            <button type="button" class="btn btn-secondary" onclick="cancelMessage()">Annuler</button>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Gestion du formulaire de message
+    document.getElementById('messageForm').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        
+        const content = document.getElementById('messageContent').value;
+        const threadId = window.location.pathname.split('/')[2];
+        
+        try {
+            await api.messages.create(threadId, content);
+            document.getElementById('messageContent').value = '';
+            loadMessages(threadId);
+            this.parentElement.style.display = 'none';
+        } catch (error) {
+            console.error('Erreur lors de l\'envoi du message:', error);
+            alert('Une erreur est survenue lors de l\'envoi du message.');
+        }
+    });
+
+    // Fonction pour annuler l'envoi d'un message
+    function cancelMessage() {
+        document.getElementById('messageContent').value = '';
+        document.querySelector('.message-form').style.display = 'none';
+    }
+</script>
