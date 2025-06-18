@@ -1,15 +1,4 @@
-/**
- * ==========================================================================
- * SCRIPT DE CONNEXION - CINÉFORUM
- * ==========================================================================
- * Gestion de la page de connexion : validation, soumission, messages
- * Author: CinéForum Team
- * Version: 1.0.0
- */
 
-// ==========================================================================
-// FONCTIONS UTILITAIRES
-// ==========================================================================
 
 /**
  * Basculer la visibilité d'un champ mot de passe
@@ -76,9 +65,7 @@ function showLoading(show = true) {
     }
 }
 
-// ==========================================================================
-// VALIDATION DU FORMULAIRE
-// ==========================================================================
+
 
 /**
  * Valider les champs du formulaire de connexion
@@ -115,9 +102,6 @@ function validateIdentifier(identifier) {
     return emailRegex.test(identifier) || usernameRegex.test(identifier);
 }
 
-// ==========================================================================
-// GESTION DES ÉVÉNEMENTS
-// ==========================================================================
 
 /**
  * Initialiser les event listeners pour la validation en temps réel
@@ -154,9 +138,6 @@ function initEventListeners() {
     });
 }
 
-// ==========================================================================
-// GESTION DE LA SOUMISSION DU FORMULAIRE
-// ==========================================================================
 
 /**
  * Gérer la soumission du formulaire de connexion
@@ -274,9 +255,7 @@ function handleLoginError(response, data) {
     showMessage(errorMessage, 'error');
 }
 
-// ==========================================================================
-// INITIALISATION DE LA PAGE
-// ==========================================================================
+
 
 /**
  * Initialiser l'animation d'entrée de la page
@@ -368,13 +347,10 @@ function initKeyboardShortcuts() {
     });
 }
 
-// ==========================================================================
-// INITIALISATION PRINCIPALE
-// ==========================================================================
 
-/**
- * Fonction principale d'initialisation
- */
+
+
+ 
 function initLoginPage() {
     // Vérifier si l'utilisateur est déjà connecté
     if (checkExistingAuth()) {
@@ -405,9 +381,6 @@ function initLoginPage() {
     console.log('Page de connexion initialisée avec succès');
 }
 
-// ==========================================================================
-// DÉMARRAGE
-// ==========================================================================
 
 // Initialiser la page quand le DOM est prêt
 document.addEventListener('DOMContentLoaded', initLoginPage);

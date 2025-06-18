@@ -20,7 +20,6 @@ func main() {
 		http.Redirect(w, r, "/register", http.StatusSeeOther)
 	})
 
-
 	http.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 
