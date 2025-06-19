@@ -1,6 +1,6 @@
-# Forum API
+# Ciné Forum
 
-Une API RESTful pour un forum de discussion développée en Go.
+Une API RESTful pour un forum de discussion développée en Go
 
 ## Prérequis
 
