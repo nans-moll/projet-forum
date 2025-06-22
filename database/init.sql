@@ -1,4 +1,4 @@
-USE forum_db;
+CREATE DATABASE forum_db;
 
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,

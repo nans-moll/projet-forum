@@ -196,16 +196,6 @@ func (c *ThreadController) GetThread(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Vérifier si l'utilisateur est authentifié
-	isAuthenticated := false
-	claims := middleware.GetUserFromContext(r)
-	if claims != nil {
-		isAuthenticated = true
-		log.Printf("[DEBUG] GetThread - Utilisateur authentifié: %s", claims.Username)
-	} else {
-		log.Printf("[DEBUG] GetThread - Utilisateur non authentifié")
-	}
-
 	// Formater les tags
 	tags := strings.Split(thread.Tags, ",")
 	if len(tags) == 1 && tags[0] == "" {
@@ -217,64 +207,24 @@ func (c *ThreadController) GetThread(w http.ResponseWriter, r *http.Request) {
 	createdAt := thread.CreatedAt.Format("02/01/2006 à 15:04")
 	log.Printf("[DEBUG] GetThread - Date formatée: %s", createdAt)
 
-	// Préparer les données pour le template
-	data := struct {
-		Thread struct {
-			ID         int64
-			Title      string
-			Content    string
-			AuthorName string
-			CreatedAt  string
-			Views      int
-			Tags       []string
-		}
-		Messages        []*models.Message
-		IsAuthenticated bool
-	}{
-		Thread: struct {
-			ID         int64
-			Title      string
-			Content    string
-			AuthorName string
-			CreatedAt  string
-			Views      int
-			Tags       []string
-		}{
-			ID:         thread.ID,
-			Title:      thread.Title,
-			Content:    thread.Description,
-			AuthorName: thread.Author.Username,
-			CreatedAt:  createdAt,
-			Views:      thread.MessageCount,
-			Tags:       tags,
-		},
-		Messages:        messages,
-		IsAuthenticated: isAuthenticated,
+	// Préparer les données pour la réponse JSON
+	responseData := map[string]interface{}{
+		"id":          thread.ID,
+		"title":       thread.Title,
+		"description": thread.Description,
+		"author":      thread.Author, // ou map[string]interface{} si besoin de filtrer
+		"created_at":  thread.CreatedAt,
+		"tags":        tags,
+		"views":       thread.MessageCount,
+		"messages":    messages,
 	}
 
-	log.Printf("[DEBUG] GetThread - Données préparées pour le template:")
-	log.Printf("[DEBUG] GetThread - Thread ID: %d", data.Thread.ID)
-	log.Printf("[DEBUG] GetThread - Thread Title: %s", data.Thread.Title)
-	log.Printf("[DEBUG] GetThread - Thread Content: %s", data.Thread.Content)
-	log.Printf("[DEBUG] GetThread - Thread AuthorName: %s", data.Thread.AuthorName)
-	log.Printf("[DEBUG] GetThread - Thread CreatedAt: %s", data.Thread.CreatedAt)
-	log.Printf("[DEBUG] GetThread - Thread Views: %d", data.Thread.Views)
-	log.Printf("[DEBUG] GetThread - Thread Tags: %v", data.Thread.Tags)
-	log.Printf("[DEBUG] GetThread - Nombre de messages: %d", len(data.Messages))
-	log.Printf("[DEBUG] GetThread - IsAuthenticated: %v", data.IsAuthenticated)
-
-	// Rendre le template
-	log.Printf("[DEBUG] GetThread - Tentative de rendu du template")
-	err = c.Templates.ExecuteTemplate(w, "threads/show.html", data)
-	if err != nil {
-		log.Printf("[DEBUG] GetThread - Erreur lors du rendu du template: %v", err)
-		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
-			Status:  "error",
-			Message: "Error rendering template",
-		})
-		return
-	}
-	log.Printf("[DEBUG] GetThread - Template rendu avec succès")
+	log.Printf("[DEBUG] GetThread - Envoi de la réponse JSON")
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   responseData,
+	})
+	return
 }
 
 // ListThreads récupère la liste des discussions

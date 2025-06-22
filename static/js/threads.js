@@ -21,7 +21,7 @@ async function loadThread() {
                     </div>
                     <div class="thread-content">${thread.description}</div>
                     <div class="thread-tags">
-                        ${thread.tags ? thread.tags.split(',').map(tag => `<span class="tag">${tag.trim()}</span>`).join('') : ''}
+                        ${Array.isArray(thread.tags) ? thread.tags.map(tag => `<span class="tag">${tag}</span>`).join('') : ''}
                     </div>
                 </div>
             `;
@@ -146,6 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Erreur lors de l\'envoi du message');
             }
         });
+    }
+
+    // Vérifier l'authentification pour mettre à jour la barre de navigation
+    if (window.auth && typeof window.auth.checkAuth === 'function') {
+        auth.checkAuth();
     }
 
     // Charger la discussion au chargement de la page

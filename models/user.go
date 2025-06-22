@@ -373,6 +373,9 @@ func GetUserThreads(db *sql.DB, userID int64) ([]map[string]interface{}, error) 
 // AuthenticateUser vérifie les identifiants d'un utilisateur
 func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
 	var user User
+	var profilePicture, biography sql.NullString
+	var lastConnection sql.NullTime
+
 	query := `
 		SELECT id, username, email, password_hash, role, is_banned, created_at, last_connection,
 			   profile_picture, biography, message_count, thread_count
@@ -381,11 +384,21 @@ func AuthenticateUser(db *sql.DB, username, password string) (*User, error) {
 	`
 	err := db.QueryRow(query, username, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
-		&user.Role, &user.Banned, &user.CreatedAt, &user.LastConnection,
-		&user.ProfilePicture, &user.Biography, &user.MessageCount, &user.ThreadCount,
+		&user.Role, &user.Banned, &user.CreatedAt, &lastConnection,
+		&profilePicture, &biography, &user.MessageCount, &user.ThreadCount,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if profilePicture.Valid {
+		user.ProfilePicture = profilePicture.String
+	}
+	if biography.Valid {
+		user.Biography = biography.String
+	}
+	if lastConnection.Valid {
+		user.LastConnection = lastConnection.Time
 	}
 
 	// Vérifier le mot de passe

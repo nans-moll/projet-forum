@@ -3,7 +3,8 @@ async function apiCall(endpoint, method = 'GET', data = null) {
     console.log('[DEBUG] apiCall - Début de la requête:', {
         endpoint,
         method,
-        data
+        data,
+        url: window.location.href
     });
 
     const token = localStorage.getItem('jwt_token');
@@ -30,40 +31,67 @@ async function apiCall(endpoint, method = 'GET', data = null) {
     }
 
     try {
-        console.log('[DEBUG] apiCall - Envoi de la requête avec options:', options);
+        console.log('[DEBUG] apiCall - Envoi de la requête avec options:', {
+            ...options,
+            headers: Object.fromEntries(Object.entries(options.headers).map(([k, v]) => [k, k === 'Authorization' ? 'Bearer ***' : v]))
+        });
+        
         const response = await fetch(endpoint, options);
-        console.log('[DEBUG] apiCall - Réponse reçue:', {
+        console.log('[DEBUG] apiCall - Réponse brute:', {
             status: response.status,
             statusText: response.statusText,
-            headers: Object.fromEntries(response.headers.entries())
+            headers: Object.fromEntries(response.headers.entries()),
+            url: response.url
         });
 
-        const result = await response.json();
-        console.log('[DEBUG] apiCall - Données reçues:', result);
+        let result;
+        const contentType = response.headers.get('content-type');
+        console.log('[DEBUG] apiCall - Content-Type:', contentType);
+
+        if (contentType && contentType.includes('application/json')) {
+            result = await response.json();
+            console.log('[DEBUG] apiCall - Données JSON reçues:', result);
+        } else {
+            const text = await response.text();
+            console.log('[DEBUG] apiCall - Données texte reçues:', text);
+            try {
+                result = JSON.parse(text);
+            } catch (e) {
+                console.error('[DEBUG] apiCall - Erreur de parsing JSON:', e);
+                result = { message: text };
+            }
+        }
 
         if (!response.ok) {
             console.log('[DEBUG] apiCall - Erreur de réponse:', {
                 status: response.status,
-                message: result.message
+                message: result.message,
+                data: result
             });
 
             if (response.status === 401) {
                 console.log('[DEBUG] apiCall - Token invalide, redirection vers login');
                 localStorage.removeItem('jwt_token');
-                window.location.href = '/login';
+                window.location.href = '/auth/login';
             }
             throw new Error(result.message || 'Une erreur est survenue');
         }
 
         return result;
     } catch (error) {
-        console.error('[DEBUG] apiCall - Erreur:', {
+        console.error('[DEBUG] apiCall - Erreur détaillée:', {
             message: error.message,
-            stack: error.stack
+            stack: error.stack,
+            name: error.name,
+            endpoint,
+            method
         });
         throw error;
     }
 }
+
+// Exporter la fonction apiCall
+window.apiCall = apiCall;
 
 // Fonction pour charger les discussions
 async function loadThreads() {
@@ -101,7 +129,7 @@ async function loadStats() {
 const api = {
     // Authentification
     auth: {
-        login: (identifier, password) => apiCall('/api/auth/login', 'POST', { identifier, password }),
+        login: (username, password) => apiCall('/api/auth/login', 'POST', { username, password }),
         register: (username, email, password) => apiCall('/api/auth/register', 'POST', { username, email, password })
     },
 
@@ -152,4 +180,7 @@ const api = {
     likes: {
         toggle: (messageId, type) => apiCall(`/api/messages/${messageId}/vote`, 'POST', { type })
     }
-}; 
+};
+
+// Exporter l'objet api
+window.api = api; 

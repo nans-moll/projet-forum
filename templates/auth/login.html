@@ -18,7 +18,7 @@
             <div id="errorMessage" class="error-message"></div>
             <div id="successMessage" class="success-message"></div>
 
-            <form class="auth-form" id="loginForm">
+            <form class="auth-form" id="loginForm" onsubmit="return auth.login(event)">
                 <div class="form-group has-icon" data-icon="👤">
                     <label for="username">Identifiant</label>
                     <input type="text" id="username" name="username" required 
@@ -33,7 +33,7 @@
                 </div>
 
                 <div class="form-group">
-                    <a href="/forgot-password" class="forgot-password">Mot de passe oublié ?</a>
+                    <a href="/auth/forgot-password" class="forgot-password">Mot de passe oublié ?</a>
                 </div>
 
                 <button type="submit" class="auth-submit">
@@ -48,7 +48,7 @@
             <div class="auth-footer">
                 <p class="auth-link">
                     Pas encore de compte ? 
-                    <a href="/register">S'inscrire</a>
+                    <a href="/auth/register">S'inscrire</a>
                 </p>
                 <p class="auth-link" style="margin-top: 1rem;">
                     <a href="/">← Retour à l'accueil</a>
@@ -74,8 +74,14 @@
         }
 
         function showMessage(message, type = 'error') {
+            console.log('[DEBUG] showMessage - Affichage du message:', { message, type });
             const errorDiv = document.getElementById('errorMessage');
             const successDiv = document.getElementById('successMessage');
+            
+            if (!errorDiv || !successDiv) {
+                console.error('[DEBUG] showMessage - Éléments de message non trouvés');
+                return;
+            }
             
             errorDiv.style.display = 'none';
             successDiv.style.display = 'none';
@@ -90,8 +96,14 @@
         }
 
         function showLoading(show = true) {
+            console.log('[DEBUG] showLoading - État du chargement:', show);
             const loading = document.getElementById('loading');
             const submitBtn = document.querySelector('.auth-submit');
+            
+            if (!loading || !submitBtn) {
+                console.error('[DEBUG] showLoading - Éléments de chargement non trouvés');
+                return;
+            }
             
             if (show) {
                 loading.style.display = 'block';
@@ -102,64 +114,43 @@
             }
         }
 
-        // Animation d'entrée
+        // Animation d'entrée et initialisation
         document.addEventListener('DOMContentLoaded', function() {
-            const card = document.querySelector('.auth-card');
-            card.style.opacity = '0';
-            card.style.transform = 'translateY(20px)';
+            console.log('[DEBUG] DOMContentLoaded - Initialisation de la page de connexion');
             
-            setTimeout(() => {
-                card.style.transition = 'all 0.6s ease';
-                card.style.opacity = '1';
-                card.style.transform = 'translateY(0)';
-            }, 100);
+            // Animation
+            const card = document.querySelector('.auth-card');
+            if (card) {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                
+                setTimeout(() => {
+                    card.style.transition = 'all 0.6s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 100);
+            }
 
             // Vérifier si l'utilisateur est déjà connecté
             const token = localStorage.getItem('jwt_token');
+            console.log('[DEBUG] DOMContentLoaded - Token JWT:', token ? 'Présent' : 'Absent');
+            
             if (token) {
+                console.log('[DEBUG] DOMContentLoaded - Utilisateur déjà connecté, redirection...');
                 showMessage('Vous êtes déjà connecté. Redirection...', 'success');
                 setTimeout(() => {
                     window.location.href = '/';
                 }, 1500);
+                return;
             }
 
             // Vérifier s'il y a un message dans l'URL
             const urlParams = new URLSearchParams(window.location.search);
             const message = urlParams.get('message');
+            console.log('[DEBUG] DOMContentLoaded - Message dans l\'URL:', message);
+            
             if (message === 'account_created') {
                 showMessage('Compte créé avec succès ! Vous pouvez maintenant vous connecter.', 'success');
-            }
-
-            // Gestion du formulaire de connexion
-            const loginForm = document.getElementById('loginForm');
-            if (loginForm) {
-                loginForm.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-                    const username = document.getElementById('username').value;
-                    const password = document.getElementById('password').value;
-                    
-                    try {
-                        showLoading(true);
-                        const response = await apiCall('/api/login', 'POST', {
-                            username,
-                            password
-                        });
-
-                        if (response.status === 'success') {
-                            localStorage.setItem('jwt_token', response.data.token);
-                            showMessage('Connexion réussie ! Redirection...', 'success');
-                            setTimeout(() => {
-                                window.location.href = '/';
-                            }, 1500);
-                        } else {
-                            showMessage(response.message || 'Erreur lors de la connexion');
-                        }
-                    } catch (error) {
-                        showMessage(error.message || 'Erreur lors de la connexion');
-                    } finally {
-                        showLoading(false);
-                    }
-                });
             }
         });
     </script>
