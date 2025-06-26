@@ -180,6 +180,37 @@ function showLoading(show = true) {
     }
 }
 
+// Fonction pour vérifier l'authentification au chargement de la page
+async function checkAuthOnLoad() {
+    console.log('[DEBUG] checkAuthOnLoad - Vérification de l\'authentification');
+    const token = localStorage.getItem('jwt_token');
+    
+    if (!token) {
+        console.log('[DEBUG] checkAuthOnLoad - Pas de token, redirection vers login');
+        window.location.href = '/login';
+        return false;
+    }
+    
+    try {
+        // Vérifier si le token est valide en appelant une API protégée
+        const response = await apiCall('/api/users/me');
+        if (response.status !== 'success') {
+            console.log('[DEBUG] checkAuthOnLoad - Token invalide, suppression et redirection');
+            localStorage.removeItem('jwt_token');
+            window.location.href = '/login';
+            return false;
+        }
+        
+        console.log('[DEBUG] checkAuthOnLoad - Authentification valide');
+        return true;
+    } catch (error) {
+        console.error('[DEBUG] checkAuthOnLoad - Erreur lors de la vérification:', error);
+        localStorage.removeItem('jwt_token');
+        window.location.href = '/login';
+        return false;
+    }
+}
+
 // Fonction pour vérifier si l'utilisateur est authentifié
 function isAuthenticated() {
     const token = localStorage.getItem('jwt_token');
@@ -193,4 +224,4 @@ window.auth = {
     checkAuth,
     logout,
     login: handleLogin
-}; 
+};
