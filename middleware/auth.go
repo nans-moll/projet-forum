@@ -55,24 +55,17 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		fmt.Printf("[DEBUG] AuthMiddleware - URL: %s\n", r.URL.Path)
 		fmt.Printf("[DEBUG] AuthMiddleware - Headers: %v\n", r.Header)
 
-		// Vérifier d'abord le cookie de session
-		cookie, err := r.Cookie("session")
-		if err == nil {
-			fmt.Printf("[DEBUG] AuthMiddleware - Cookie de session trouvé: %s\n", cookie.Value)
-			// Si c'est une requête HTML, on autorise l'accès
-			if strings.Contains(r.Header.Get("Accept"), "text/html") {
-				fmt.Printf("[DEBUG] AuthMiddleware - Requête HTML autorisée\n")
-				next.ServeHTTP(w, r)
-				return
-			}
-		} else {
-			fmt.Printf("[DEBUG] AuthMiddleware - Pas de cookie de session: %v\n", err)
+		// Pour les requêtes HTML (pages), on laisse passer et la vérification se fait côté client
+		if strings.Contains(r.Header.Get("Accept"), "text/html") {
+			fmt.Printf("[DEBUG] AuthMiddleware - Requête HTML autorisée, vérification côté client\n")
+			next.ServeHTTP(w, r)
+			return
 		}
 
-		// Sinon, vérifier le token JWT
+		// Pour les requêtes API, vérifier le token JWT
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			fmt.Printf("[DEBUG] AuthMiddleware - Pas de header Authorization\n")
+			fmt.Printf("[DEBUG] AuthMiddleware - Pas de header Authorization pour requête API\n")
 			SendJSON(w, http.StatusUnauthorized, Response{
 				Status:  "error",
 				Message: "Authorization header is required",

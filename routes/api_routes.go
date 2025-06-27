@@ -22,9 +22,10 @@ func SetupAPIRoutes(router *mux.Router, authController *controllers.AuthControll
 	// Routes protégées
 	router.Handle("/api/users/me", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserProfile))).Methods("GET")
 	router.Handle("/api/users/me", middleware.AuthMiddleware(http.HandlerFunc(userController.UpdateUserProfile))).Methods("PUT")
+	router.Handle("/api/users/me/avatar", middleware.AuthMiddleware(http.HandlerFunc(userController.UploadAvatar))).Methods("POST")
+	router.Handle("/api/users/{id}/threads", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserThreads))).Methods("GET")
+	router.Handle("/api/users/{id}/messages", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserMessages))).Methods("GET")
 	router.Handle("/api/users/stats", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserStats))).Methods("GET")
-	router.Handle("/api/users/threads", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserThreads))).Methods("GET")
-	router.Handle("/api/users/messages", middleware.AuthMiddleware(http.HandlerFunc(userController.GetUserMessages))).Methods("GET")
 
 	// Routes des fils de discussion
 	router.Handle("/api/threads", middleware.AuthMiddleware(http.HandlerFunc(threadController.CreateThread))).Methods("POST")

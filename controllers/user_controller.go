@@ -4,10 +4,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"projet-forum/middleware"
 	"projet-forum/models"
 	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
 )
 
 type UserController struct {
@@ -466,70 +474,234 @@ func (c *UserController) GetUserStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
-// GetUserThreads récupère les fils de discussion d'un utilisateur
+// GetUserThreads récupère les discussions créées par un utilisateur
 func (c *UserController) GetUserThreads(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID utilisateur depuis l'URL
+	vars := mux.Vars(r)
+	userIDStr := vars["id"]
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid user ID",
+		})
 		return
 	}
 
-	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
-	if err != nil || limit <= 0 {
-		limit = 10 // Valeur par défaut
-	}
+	// Récupérer les discussions de l'utilisateur
+	query := `
+		SELECT t.id, t.title, t.content, t.created_at, 
+			   (SELECT COUNT(*) FROM messages m WHERE m.thread_id = t.id) as message_count
+		FROM threads t
+		WHERE t.author_id = ?
+		ORDER BY t.created_at DESC
+		LIMIT 20
+	`
 
-	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
-	if err != nil || offset < 0 {
-		offset = 0
-	}
-
-	threads, err := models.GetThreadsByAuthorID(userID, limit, offset)
+	rows, err := c.DB.Query(query, userID)
 	if err != nil {
-		http.Error(w, "Error fetching user threads", http.StatusInternalServerError)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error fetching user threads",
+		})
 		return
 	}
+	defer rows.Close()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(threads)
+	var threads []map[string]interface{}
+	for rows.Next() {
+		var thread struct {
+			ID           int64     `json:"id"`
+			Title        string    `json:"title"`
+			Content      string    `json:"content"`
+			CreatedAt    time.Time `json:"created_at"`
+			MessageCount int       `json:"message_count"`
+		}
+
+		err := rows.Scan(&thread.ID, &thread.Title, &thread.Content, &thread.CreatedAt, &thread.MessageCount)
+		if err != nil {
+			continue
+		}
+
+		threads = append(threads, map[string]interface{}{
+			"id":            thread.ID,
+			"title":         thread.Title,
+			"content":       thread.Content,
+			"created_at":    thread.CreatedAt,
+			"message_count": thread.MessageCount,
+		})
+	}
+
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   threads,
+	})
 }
 
-// GetUserMessages récupère les messages d'un utilisateur
+// GetUserMessages récupère les messages postés par un utilisateur
 func (c *UserController) GetUserMessages(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID, err := strconv.Atoi(r.URL.Query().Get("id"))
+	// Récupérer l'ID utilisateur depuis l'URL
+	vars := mux.Vars(r)
+	userIDStr := vars["id"]
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "Invalid user ID",
+		})
 		return
 	}
 
-	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
-	if err != nil || limit <= 0 {
-		limit = 10 // Valeur par défaut
-	}
+	// Récupérer les messages de l'utilisateur
+	query := `
+		SELECT m.id, m.content, m.created_at, m.thread_id, t.title as thread_title
+		FROM messages m
+		JOIN threads t ON m.thread_id = t.id
+		WHERE m.author_id = ?
+		ORDER BY m.created_at DESC
+		LIMIT 20
+	`
 
-	offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
-	if err != nil || offset < 0 {
-		offset = 0
-	}
-
-	messages, err := models.GetMessagesByAuthorID(userID, limit, offset)
+	rows, err := c.DB.Query(query, userID)
 	if err != nil {
-		http.Error(w, "Error fetching user messages", http.StatusInternalServerError)
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error fetching user messages",
+		})
+		return
+	}
+	defer rows.Close()
+
+	var messages []map[string]interface{}
+	for rows.Next() {
+		var message struct {
+			ID          int64     `json:"id"`
+			Content     string    `json:"content"`
+			CreatedAt   time.Time `json:"created_at"`
+			ThreadID    int64     `json:"thread_id"`
+			ThreadTitle string    `json:"thread_title"`
+		}
+
+		err := rows.Scan(&message.ID, &message.Content, &message.CreatedAt, &message.ThreadID, &message.ThreadTitle)
+		if err != nil {
+			continue
+		}
+
+		messages = append(messages, map[string]interface{}{
+			"id":           message.ID,
+			"content":      message.Content,
+			"created_at":   message.CreatedAt,
+			"thread_id":    message.ThreadID,
+			"thread_title": message.ThreadTitle,
+		})
+	}
+
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data:   messages,
+	})
+}
+
+// UploadAvatar gère l'upload de l'avatar utilisateur
+func (c *UserController) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		middleware.SendJSON(w, http.StatusMethodNotAllowed, middleware.Response{
+			Status:  "error",
+			Message: "Method not allowed",
+		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(messages)
+	// Vérifier l'authentification
+	claims := middleware.GetUserFromContext(r)
+	if claims == nil {
+		middleware.SendJSON(w, http.StatusUnauthorized, middleware.Response{
+			Status:  "error",
+			Message: "Unauthorized",
+		})
+		return
+	}
+
+	// Analyser le formulaire multipart
+	err := r.ParseMultipartForm(5 * 1024 * 1024) // 5MB max
+	if err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "File too large",
+		})
+		return
+	}
+
+	file, header, err := r.FormFile("profile_picture")
+	if err != nil {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "No file uploaded",
+		})
+		return
+	}
+	defer file.Close()
+
+	// Valider le type de fichier
+	if !strings.HasPrefix(header.Header.Get("Content-Type"), "image/") {
+		middleware.SendJSON(w, http.StatusBadRequest, middleware.Response{
+			Status:  "error",
+			Message: "File must be an image",
+		})
+		return
+	}
+
+	// Créer le dossier uploads s'il n'existe pas
+	uploadsDir := "static/uploads/avatars"
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error creating upload directory",
+		})
+		return
+	}
+
+	// Générer un nom de fichier unique
+	ext := filepath.Ext(header.Filename)
+	filename := fmt.Sprintf("avatar_%d_%d%s", claims.UserID, time.Now().Unix(), ext)
+	filepath := fmt.Sprintf("%s/%s", uploadsDir, filename)
+
+	// Sauvegarder le fichier
+	dst, err := os.Create(filepath)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error saving file",
+		})
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error copying file",
+		})
+		return
+	}
+
+	// Mettre à jour l'utilisateur avec le nouveau chemin de l'avatar
+	profilePictureURL := fmt.Sprintf("/static/uploads/avatars/%s", filename)
+	_, err = c.DB.Exec("UPDATE users SET profile_picture = ? WHERE id = ?", profilePictureURL, claims.UserID)
+	if err != nil {
+		middleware.SendJSON(w, http.StatusInternalServerError, middleware.Response{
+			Status:  "error",
+			Message: "Error updating user profile",
+		})
+		return
+	}
+
+	middleware.SendJSON(w, http.StatusOK, middleware.Response{
+		Status: "success",
+		Data: map[string]string{
+			"profile_picture": profilePictureURL,
+		},
+	})
 }
 
 // GetCurrentUser récupère les informations de l'utilisateur connecté
@@ -781,22 +953,8 @@ func (c *UserController) AddMessageReaction(w http.ResponseWriter, r *http.Reque
 
 // ShowProfilePage affiche la page de profil de l'utilisateur
 func (c *UserController) ShowProfilePage(w http.ResponseWriter, r *http.Request) {
-	// Vérifier l'authentification via le cookie de session
-	if _, err := r.Cookie("session"); err != nil {
-		// Rediriger vers la page de connexion si pas de session
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	// Vérifier le token JWT
-	claims := middleware.GetUserFromContext(r)
-	if claims == nil {
-		// Rediriger vers la page de connexion si token invalide
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
-	}
-
-	// Servir la page de profil
+	// Servir la page de profil - l'authentification se fait côté client
+	log.Printf("Affichage de la page de profil pour: %s", r.URL.Path)
 	http.ServeFile(w, r, "templates/users/profile.html")
 }
 

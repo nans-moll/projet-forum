@@ -225,3 +225,9 @@ window.auth = {
     logout,
     login: handleLogin
 };
+
+// Initialiser l'authentification au chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('[DEBUG] DOMContentLoaded - Initialisation de l\'authentification');
+    checkAuth();
+});

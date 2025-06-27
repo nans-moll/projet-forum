@@ -18,8 +18,8 @@
                 <li><a href="/search">Recherche</a></li>
             </ul>
             <div class="auth-buttons" id="authButtons">
-                <a href="/login" class="btn btn-secondary">Connexion</a>
-                <a href="/register" class="btn btn-primary">Inscription</a>
+                <a href="/auth/login" class="btn btn-secondary">Connexion</a>
+                <a href="/auth/register" class="btn btn-primary">Inscription</a>
             </div>
             <div class="user-menu" id="userMenu" style="display: none;">
                 <span id="username"></span>
@@ -99,6 +99,35 @@
     <!-- Scripts -->
     <script src="/static/js/api.js"></script>
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/api.js"></script>
     <script src="/static/js/profile.js"></script>
+    <script>
+        // Fonctions pour la navigation
+        function showCreateThread() {
+            window.location.href = '/threads/create';
+        }
+
+        function logout() {
+            if (window.auth && window.auth.logout) {
+                window.auth.logout();
+            } else {
+                localStorage.removeItem('jwt_token');
+                window.location.href = '/';
+            }
+        }
+
+        // Vérifier l'authentification au chargement de la page
+        document.addEventListener('DOMContentLoaded', function() {
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                alert('Vous devez être connecté pour accéder à votre profil');
+                window.location.href = '/auth/login';
+                return;
+            }
+            
+            // Continuer avec le chargement du profil
+            console.log('Token trouvé, chargement du profil...');
+        });
+    </script>
 </body>
 </html>

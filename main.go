@@ -85,6 +85,7 @@ func main() {
 		"templates/threads/show.html",
 		"templates/threads/edit.html",
 		"templates/threads/create.html",
+		"templates/users/profile.html",
 	}
 
 	for _, file := range templateFiles {
@@ -126,6 +127,17 @@ func main() {
 			log.Printf("Erreur lors du rendu de index.html: %v", err)
 			http.Error(w, "Erreur serveur", http.StatusInternalServerError)
 		}
+	}).Methods("GET")
+
+	// Route de test pour l'accès au profil
+	router.HandleFunc("/test-profile", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "test-profile.html")
+	}).Methods("GET")
+
+	// Route de profil temporaire pour déboguer (sans middleware)
+	router.HandleFunc("/profile-debug", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Accès à /profile-debug")
+		http.ServeFile(w, r, "templates/users/profile.html")
 	}).Methods("GET")
 
 	// Démarrer le serveur
