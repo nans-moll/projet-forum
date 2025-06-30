@@ -188,7 +188,7 @@ Serveur démarré sur http://localhost:8080
 
 ### Compte administrateur
 - **Email** : admin@forum.com
-- **Mot de passe** : admin123
+- **Mot de passe** : Jesaispas01*
 
 ### Compte utilisateur
 - **Email** : nans13@gmail.com
